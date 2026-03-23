@@ -29,8 +29,7 @@ from apscheduler.triggers.date import DateTrigger
 
 # ── CONFIG — all via environment variables ─────────────────────────────────
 BOT_TOKEN      = os.environ.get("BOT_TOKEN", "")
-TIMEZONE       = os.environ.get("TIMEZONE", "Asia/Makassar")
-# Note: can be changed at runtime via /timezone command
+TIMEZONE       = os.environ.get("TIMEZONE", "Asia/Makassar")  # default = Bali WITA
 ADMIN_CHAT_ID  = int(os.environ.get("ADMIN_CHAT_ID", "0"))
 # ──────────────────────────────────────────────────────────────────────────
 
@@ -44,6 +43,8 @@ log = logging.getLogger(__name__)
 
 # user_state[chat_id] = { schedule, remind_minutes, job_ids[] }
 user_state: dict = {}
+# Buffer for multi-part save codes (Telegram splits long messages)
+code_buffer: dict = {}  # chat_id -> {"parts": [], "job": None}
 stats = {"total_users": set(), "schedules_loaded": 0}
 scheduler = AsyncIOScheduler(timezone=TIMEZONE)
 
@@ -452,7 +453,7 @@ async def cmd_status(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 async def cmd_admin(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     cid = update.effective_chat.id
     if cid != ADMIN_CHAT_ID:
-        return  # silently ignore — non-admins don't even know this exists
+        return  # silently ignore
 
     total_jobs = sum(len(u.get("job_ids", [])) for u in user_state.values())
     loaded     = sum(1 for u in user_state.values() if u.get("schedule"))
@@ -464,63 +465,46 @@ async def cmd_admin(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         f"🟢 Active sessions: {len(user_state)}\n"
         f"📅 Sessions with schedule: {loaded}\n"
         f"🔔 Scheduled reminder jobs: {total_jobs}\n"
-        f"🌐 Timezone: {TIMEZONE}"
+        f"🌐 Timezone: {TIMEZONE}\n\n"
+        "Use /broadcast <message> to notify all users."
     )
     await update.message.reply_text(text, parse_mode="Markdown")
 
 
-# ═══════════════════════════════════════════════════════════════════════════
-#  GENERIC MESSAGE HANDLER — tries to parse as Chronos code
-# ═══════════════════════════════════════════════════════════════════════════
+async def cmd_broadcast(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """Admin-only: broadcast a message to all users who have ever loaded a schedule."""
+    cid = update.effective_chat.id
+    if cid != ADMIN_CHAT_ID:
+        return
 
-async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    cid  = update.effective_chat.id
-    text = update.message.text.strip()
-
-    # Heuristic: a Chronos save code is long with no spaces/newlines
-    if len(text) > 50 and " " not in text and "\n" not in text:
-        try:
-            sch = parse_code(text)
-            if "events" not in sch and "tasks" not in sch:
-                raise ValueError("missing events/tasks keys")
-
-            user_state.setdefault(cid, {"schedule": None, "remind_minutes": DEFAULT_REMIND_MINS, "job_ids": []})
-            user_state[cid]["schedule"] = sch
-            stats["total_users"].add(cid)
-            stats["schedules_loaded"] += 1
-            count = reschedule(ctx.application, cid)
-
-            tz         = ZoneInfo(TIMEZONE)
-            today      = datetime.now(tz).date()
-            today_evts = sum(1 for s, _, _ in all_upcoming(sch, 1) if s.date() == today)
-            week_evts  = len(all_upcoming(sch, 7))
-
-            reply = (
-                f"✅ *Schedule loaded!*\n\n"
-                f"📁 *{sch.get('proj','My Schedule')}*\n"
-                f"📅 {len(sch.get('events',[]))} events  ·  "
-                f"{len(sch.get('tasks',[]))} unscheduled tasks\n"
-                f"🔔 {count} reminders set "
-                f"({user_state[cid]['remind_minutes']}min before + at start)\n\n"
-            )
-            if today_evts:
-                reply += f"You have *{today_evts}* event(s) today → /today\n"
-            reply += f"*{week_evts}* event(s) in the next 7 days → /week"
-
-            await update.message.reply_text(reply, parse_mode="Markdown")
-            return
-
-        except Exception as ex:
-            log.debug("Not a Chronos code: %s", ex)
-
-    # Fallback
-    ud = user_state.get(cid, {})
-    if not ud.get("schedule"):
-        await update.message.reply_text("Paste your Chronos save code to get started, or use /help.")
-    else:
+    if not ctx.args:
         await update.message.reply_text(
-            "Try /today, /tomorrow, /week, /next — or paste a new Chronos code to update your schedule."
+            "Usage: `/broadcast Your message here`\n"
+            "Sends to all users who have loaded a schedule.",
+            parse_mode="Markdown",
         )
+        return
+
+    msg     = " ".join(ctx.args)
+    targets = list(stats["total_users"])
+    ok, fail = 0, 0
+
+    for uid in targets:
+        try:
+            await ctx.bot.send_message(
+                uid,
+                f"📢 *Message from Chronos*\n\n{msg}",
+                parse_mode="Markdown",
+            )
+            ok += 1
+        except Exception:
+            fail += 1
+
+    await update.message.reply_text(
+        f"📢 Broadcast sent\n✅ {ok} delivered  ·  ❌ {fail} failed",
+        parse_mode="Markdown",
+    )
+
 
 async def cmd_timezone(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     global TIMEZONE
@@ -557,7 +541,6 @@ async def cmd_timezone(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     TIMEZONE = tz_input
     scheduler.configure(timezone=TIMEZONE)
 
-    # Reschedule all active users with new timezone
     count = 0
     for uid in user_state:
         if user_state[uid].get("schedule"):
@@ -571,6 +554,106 @@ async def cmd_timezone(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         f"🔔 Rescheduled reminders for {count} active user(s).",
         parse_mode="Markdown",
     )
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  MULTI-PART CODE BUFFER
+# ═══════════════════════════════════════════════════════════════════════════
+
+async def try_parse_buffer(ctx: ContextTypes.DEFAULT_TYPE):
+    """Called 3s after last code chunk — joins all parts and tries to parse."""
+    cid = ctx.job.data["cid"]
+    app = ctx.job.data["app"]
+    buf = code_buffer.pop(cid, None)
+    if not buf:
+        return
+
+    full_code = "".join(buf["parts"])
+    try:
+        sch = parse_code(full_code)
+        if "events" not in sch and "tasks" not in sch:
+            raise ValueError("missing keys")
+
+        user_state.setdefault(cid, {"schedule": None, "remind_minutes": DEFAULT_REMIND_MINS, "job_ids": []})
+        user_state[cid]["schedule"] = sch
+        stats["total_users"].add(cid)
+        stats["schedules_loaded"] += 1
+        count = reschedule(app, cid)
+
+        tz         = ZoneInfo(TIMEZONE)
+        today      = datetime.now(tz).date()
+        today_evts = sum(1 for s, _, _ in all_upcoming(sch, 1) if s.date() == today)
+        week_evts  = len(all_upcoming(sch, 7))
+
+        reply = (
+            f"✅ *Schedule loaded!*\n\n"
+            f"📁 *{sch.get('proj','My Schedule')}*\n"
+            f"📅 {len(sch.get('events',[]))} events  ·  "
+            f"{len(sch.get('tasks',[]))} unscheduled tasks\n"
+            f"🔔 {count} reminders set "
+            f"({user_state[cid]['remind_minutes']}min before + at start)\n\n"
+        )
+        if today_evts:
+            reply += f"You have *{today_evts}* event(s) today → /today\n"
+        reply += f"*{week_evts}* event(s) in the next 7 days → /week"
+        await ctx.bot.send_message(cid, reply, parse_mode="Markdown")
+
+    except Exception as ex:
+        log.debug("Buffer parse failed (%d chars): %s", len(full_code), ex)
+        await ctx.bot.send_message(
+            cid,
+            "❌ Couldn't read that code — make sure you copy the *entire* save code from Chronos.",
+            parse_mode="Markdown",
+        )
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  GENERIC MESSAGE HANDLER
+# ═══════════════════════════════════════════════════════════════════════════
+
+async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    cid  = update.effective_chat.id
+    text = update.message.text.strip()
+
+    # Could be a chunk of a Chronos save code — buffer and assemble
+    looks_like_code = len(text) > 10 and " " not in text and "\n" not in text
+
+    if looks_like_code:
+        if cid not in code_buffer:
+            code_buffer[cid] = {"parts": [], "job": None}
+        code_buffer[cid]["parts"].append(text)
+
+        # Cancel previous timer if any
+        old_job = code_buffer[cid].get("job")
+        if old_job:
+            try:
+                old_job.schedule_removal()
+            except Exception:
+                pass
+
+        # Wait 3s for more parts, then parse the assembled code
+        job = ctx.application.job_queue.run_once(
+            try_parse_buffer,
+            when=3,
+            data={"cid": cid, "app": ctx.application},
+            name=f"codeparse_{cid}",
+        )
+        code_buffer[cid]["job"] = job
+        return
+
+    # Fallback
+    ud = user_state.get(cid, {})
+    if not ud.get("schedule"):
+        await update.message.reply_text("Paste your Chronos save code to get started, or use /help.")
+    else:
+        await update.message.reply_text(
+            "Try /today, /tomorrow, /week, /next — or paste a new Chronos code to update your schedule."
+        )
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  POST INIT
+# ═══════════════════════════════════════════════════════════════════════════
 
 async def post_init(app: Application):
     scheduler.start()
@@ -588,18 +671,19 @@ def main():
 
     app = Application.builder().token(BOT_TOKEN).post_init(post_init).build()
 
-    app.add_handler(CommandHandler("start",    cmd_start))
-    app.add_handler(CommandHandler("help",     cmd_help))
-    app.add_handler(CommandHandler("today",    cmd_today))
-    app.add_handler(CommandHandler("tomorrow", cmd_tomorrow))
-    app.add_handler(CommandHandler("week",     cmd_week))
-    app.add_handler(CommandHandler("next",     cmd_next))
-    app.add_handler(CommandHandler("remind",   cmd_remind))
-    app.add_handler(CommandHandler("status",   cmd_status))
-    app.add_handler(CommandHandler("admin",    cmd_admin))
-    app.add_handler(CommandHandler("timezone", cmd_timezone))
+    app.add_handler(CommandHandler("start",     cmd_start))
+    app.add_handler(CommandHandler("help",      cmd_help))
+    app.add_handler(CommandHandler("today",     cmd_today))
+    app.add_handler(CommandHandler("tomorrow",  cmd_tomorrow))
+    app.add_handler(CommandHandler("week",      cmd_week))
+    app.add_handler(CommandHandler("next",      cmd_next))
+    app.add_handler(CommandHandler("remind",    cmd_remind))
+    app.add_handler(CommandHandler("status",    cmd_status))
+    app.add_handler(CommandHandler("admin",     cmd_admin))
+    app.add_handler(CommandHandler("broadcast", cmd_broadcast))
+    app.add_handler(CommandHandler("timezone",  cmd_timezone))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-  
+
     log.info("Chronos Bot running — timezone: %s", TIMEZONE)
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
