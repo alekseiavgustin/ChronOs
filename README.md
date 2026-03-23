@@ -92,7 +92,7 @@ The **💾 Save** button produces a Base64-encoded JSON blob. Paste it into **�
 
 ## Telegram Bot
 
-A companion bot — **[@chronos_1bot](https://t.me/chronos_1bot)** — lets you paste a Chronos save code into Telegram and receive reminders before your events. See [`chronos_bot.py`](chronos_bot.py) and [`SETUP.md`](SETUP.md) to self-host your own instance.
+A companion bot — **[@chronos_1bot](https://t.me/chronos_1bot)** — lets you paste a Chronos save code into Telegram and receive reminders before your events. See [`chronos_bot.py`](bot/chronos_bot.py) and [`SETUP.md`](bot/SETUP.md) to self-host your own instance.
 
 ---
 
