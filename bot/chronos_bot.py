@@ -657,6 +657,7 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 async def post_init(app: Application):
     scheduler.start()
+    asyncio.create_task(self_ping())
     log.info("Scheduler started")
 
 
@@ -687,19 +688,37 @@ def main():
     log.info("Chronos Bot running — timezone: %s", TIMEZONE)
   
     import threading
-    from http.server import HTTPServer, BaseHTTPRequestHandler
-    
-    class Health(BaseHTTPRequestHandler):
-        def do_GET(self):
-            self.send_response(200)
-            self.end_headers()
-            self.wfile.write(b"ok")
-        def log_message(self, *args):
-            pass  # silence access logs
-    
-    port = int(os.environ.get("PORT", 8080))
-    threading.Thread(target=lambda: HTTPServer(("0.0.0.0", port), Health).serve_forever(), daemon=True).start()
-    log.info("Health server on port %d", port)
+import asyncio
+import httpx
+from http.server import HTTPServer, BaseHTTPRequestHandler
+
+class Health(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"ok")
+    def log_message(self, *args):
+        pass
+
+port = int(os.environ.get("PORT", 8080))
+RENDER_URL = os.environ.get("RENDER_EXTERNAL_URL", "")
+
+threading.Thread(
+    target=lambda: HTTPServer(("0.0.0.0", port), Health).serve_forever(),
+    daemon=True
+).start()
+
+async def self_ping():
+    if not RENDER_URL:
+        return
+    async with httpx.AsyncClient() as client:
+        while True:
+            try:
+                await client.get(RENDER_URL, timeout=10)
+                log.info("Self-ping OK")
+            except Exception as ex:
+                log.warning("Self-ping failed: %s", ex)
+            await asyncio.sleep(600)  # every 10 minutes
   
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
