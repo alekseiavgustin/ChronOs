@@ -685,6 +685,22 @@ def main():
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     log.info("Chronos Bot running — timezone: %s", TIMEZONE)
+  
+    import threading
+    from http.server import HTTPServer, BaseHTTPRequestHandler
+    
+    class Health(BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b"ok")
+        def log_message(self, *args):
+            pass  # silence access logs
+    
+    port = int(os.environ.get("PORT", 8080))
+    threading.Thread(target=lambda: HTTPServer(("0.0.0.0", port), Health).serve_forever(), daemon=True).start()
+    log.info("Health server on port %d", port)
+  
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 
