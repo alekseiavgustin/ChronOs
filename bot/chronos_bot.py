@@ -6,19 +6,23 @@ Personal schedule assistant powered by your Chronos save code.
 Sends reminders before events, lets you query today/week/next event.
 
 Setup:
-  1. pip install "python-telegram-bot[job-queue]" apscheduler
+  1. pip install "python-telegram-bot[job-queue]" apscheduler httpx
   2. Talk to @BotFather on Telegram → /newbot → copy the token
   3. Set environment variables: BOT_TOKEN, TIMEZONE, ADMIN_CHAT_ID
   4. python chronos_bot.py
 """
 
+import asyncio
 import base64
 import json
 import logging
 import os
-from datetime import datetime, timedelta, date
+import threading
+from datetime import datetime, timedelta
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from zoneinfo import ZoneInfo          # Python 3.9+
 
+import httpx
 from telegram import Update
 from telegram.ext import (
     Application, CommandHandler, MessageHandler,
@@ -28,9 +32,10 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.date import DateTrigger
 
 # ── CONFIG — all via environment variables ─────────────────────────────────
-BOT_TOKEN      = os.environ.get("BOT_TOKEN", "")
-TIMEZONE       = os.environ.get("TIMEZONE", "Asia/Makassar")  # default = Bali WITA
-ADMIN_CHAT_ID  = int(os.environ.get("ADMIN_CHAT_ID", "0"))
+BOT_TOKEN         = os.environ.get("BOT_TOKEN", "")
+TIMEZONE          = os.environ.get("TIMEZONE", "Asia/Makassar")  # default = Bali WITA
+ADMIN_CHAT_ID     = int(os.environ.get("ADMIN_CHAT_ID", "0"))
+RENDER_EXTERNAL_URL = os.environ.get("RENDER_EXTERNAL_URL", "")
 # ──────────────────────────────────────────────────────────────────────────
 
 DEFAULT_REMIND_MINS = 15
@@ -49,6 +54,39 @@ stats = {"total_users": set(), "schedules_loaded": 0}
 scheduler = AsyncIOScheduler(timezone=TIMEZONE)
 
 # ═══════════════════════════════════════════════════════════════════════════
+#  HEALTH SERVER + SELF-PING  (keeps Render free tier alive)
+# ═══════════════════════════════════════════════════════════════════════════
+
+class _Health(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"ok")
+    def log_message(self, *args):
+        pass  # silence access logs
+
+
+def start_health_server():
+    port = int(os.environ.get("PORT", 8080))
+    HTTPServer(("0.0.0.0", port), _Health).serve_forever()
+
+
+async def self_ping():
+    """Ping own health endpoint every 10 min so Render never spins us down."""
+    if not RENDER_EXTERNAL_URL:
+        log.info("RENDER_EXTERNAL_URL not set — self-ping disabled")
+        return
+    async with httpx.AsyncClient() as client:
+        while True:
+            try:
+                await client.get(RENDER_EXTERNAL_URL, timeout=10)
+                log.info("Self-ping OK")
+            except Exception as ex:
+                log.warning("Self-ping failed: %s", ex)
+            await asyncio.sleep(600)  # every 10 minutes
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 #  CHRONOS PARSING
 # ═══════════════════════════════════════════════════════════════════════════
 
@@ -60,22 +98,16 @@ def parse_code(code: str) -> dict:
 
 
 def week_start_dt(ws_iso: str, tz: ZoneInfo) -> datetime:
-    """Parse the ws ISO string (week-start Monday) → tz-aware datetime at 00:00."""
     dt = datetime.fromisoformat(ws_iso.replace("Z", "+00:00"))
     return dt.astimezone(tz).replace(hour=0, minute=0, second=0, microsecond=0)
 
 
 def ev_start_min(ev: dict, day_idx: int) -> int:
-    """Return startMin for a day, respecting per-day recPos overrides."""
     rp = ev.get("recPos") or {}
     return rp.get(str(day_idx), rp.get(day_idx, ev.get("startMin", 0)))
 
 
 def occurrences(ev: dict, ws_dt: datetime, days_ahead: int = 30) -> list[tuple]:
-    """
-    Yield (start_dt, end_dt, ev) tuples for the next `days_ahead` days.
-    ws_dt must be tz-aware (Monday of the base week in the save file).
-    """
     tz   = ws_dt.tzinfo
     now  = datetime.now(tz)
     today_midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -120,7 +152,6 @@ def occurrences(ev: dict, ws_dt: datetime, days_ahead: int = 30) -> list[tuple]:
 
 
 def all_upcoming(schedule: dict, days_ahead: int = 30) -> list[tuple]:
-    """All upcoming (start_dt, end_dt, ev) for a schedule."""
     tz   = ZoneInfo(TIMEZONE)
     ws   = week_start_dt(schedule.get("ws", datetime.now(tz).isoformat()), tz)
     result = []
@@ -174,7 +205,6 @@ async def _send(bot, chat_id: int, text: str):
 
 
 def reschedule(app: Application, chat_id: int) -> int:
-    """Clear old jobs and schedule fresh reminders. Returns count of reminder jobs."""
     ud = user_state.get(chat_id)
     if not ud or not ud.get("schedule"):
         return 0
@@ -191,7 +221,6 @@ def reschedule(app: Application, chat_id: int) -> int:
         dur  = ev.get("dur", 60)
         tag  = f"{chat_id}_{s.isoformat()}_{name[:8]}"
 
-        # ── pre-event reminder ────────────────────────────────────────────
         if remind_mins > 0:
             rdt = s - timedelta(minutes=remind_mins)
             if rdt > now:
@@ -209,7 +238,6 @@ def reschedule(app: Application, chat_id: int) -> int:
                 job_ids.append(jid)
                 remind_count += 1
 
-        # ── at-start notification ─────────────────────────────────────────
         if s > now:
             jid = f"now_{tag}"
             txt = (
@@ -259,7 +287,6 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     user_state.setdefault(cid, {"schedule": None, "remind_minutes": DEFAULT_REMIND_MINS, "job_ids": []})
     stats["total_users"].add(cid)
 
-    # Notify admin of new user
     if ADMIN_CHAT_ID and cid != ADMIN_CHAT_ID:
         try:
             name = user.username or user.first_name or str(cid)
@@ -453,7 +480,7 @@ async def cmd_status(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 async def cmd_admin(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     cid = update.effective_chat.id
     if cid != ADMIN_CHAT_ID:
-        return  # silently ignore
+        return
 
     total_jobs = sum(len(u.get("job_ids", [])) for u in user_state.values())
     loaded     = sum(1 for u in user_state.values() if u.get("schedule"))
@@ -472,7 +499,6 @@ async def cmd_admin(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 
 async def cmd_broadcast(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    """Admin-only: broadcast a message to all users who have ever loaded a schedule."""
     cid = update.effective_chat.id
     if cid != ADMIN_CHAT_ID:
         return
@@ -528,7 +554,7 @@ async def cmd_timezone(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     tz_input = ctx.args[0].strip()
     try:
-        ZoneInfo(tz_input)  # validates it
+        ZoneInfo(tz_input)
     except Exception:
         await update.message.reply_text(
             f"❌ Unknown timezone `{tz_input}`.\n"
@@ -561,7 +587,6 @@ async def cmd_timezone(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 # ═══════════════════════════════════════════════════════════════════════════
 
 async def try_parse_buffer(ctx: ContextTypes.DEFAULT_TYPE):
-    """Called 3s after last code chunk — joins all parts and tries to parse."""
     cid = ctx.job.data["cid"]
     app = ctx.job.data["app"]
     buf = code_buffer.pop(cid, None)
@@ -615,7 +640,6 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     cid  = update.effective_chat.id
     text = update.message.text.strip()
 
-    # Could be a chunk of a Chronos save code — buffer and assemble
     looks_like_code = len(text) > 10 and " " not in text and "\n" not in text
 
     if looks_like_code:
@@ -623,7 +647,6 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             code_buffer[cid] = {"parts": [], "job": None}
         code_buffer[cid]["parts"].append(text)
 
-        # Cancel previous timer if any
         old_job = code_buffer[cid].get("job")
         if old_job:
             try:
@@ -631,7 +654,6 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             except Exception:
                 pass
 
-        # Wait 3s for more parts, then parse the assembled code
         job = ctx.application.job_queue.run_once(
             try_parse_buffer,
             when=3,
@@ -641,7 +663,6 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         code_buffer[cid]["job"] = job
         return
 
-    # Fallback
     ud = user_state.get(cid, {})
     if not ud.get("schedule"):
         await update.message.reply_text("Paste your Chronos save code to get started, or use /help.")
@@ -670,6 +691,10 @@ def main():
         print("❌  BOT_TOKEN environment variable not set!")
         return
 
+    # Start health server in background thread (keeps Render happy)
+    threading.Thread(target=start_health_server, daemon=True).start()
+    log.info("Health server started on port %s", os.environ.get("PORT", 8080))
+
     app = Application.builder().token(BOT_TOKEN).post_init(post_init).build()
 
     app.add_handler(CommandHandler("start",     cmd_start))
@@ -686,40 +711,6 @@ def main():
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     log.info("Chronos Bot running — timezone: %s", TIMEZONE)
-  
-    import threading
-import asyncio
-import httpx
-from http.server import HTTPServer, BaseHTTPRequestHandler
-
-class Health(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.end_headers()
-        self.wfile.write(b"ok")
-    def log_message(self, *args):
-        pass
-
-port = int(os.environ.get("PORT", 8080))
-RENDER_URL = os.environ.get("RENDER_EXTERNAL_URL", "")
-
-threading.Thread(
-    target=lambda: HTTPServer(("0.0.0.0", port), Health).serve_forever(),
-    daemon=True
-).start()
-
-async def self_ping():
-    if not RENDER_URL:
-        return
-    async with httpx.AsyncClient() as client:
-        while True:
-            try:
-                await client.get(RENDER_URL, timeout=10)
-                log.info("Self-ping OK")
-            except Exception as ex:
-                log.warning("Self-ping failed: %s", ex)
-            await asyncio.sleep(600)  # every 10 minutes
-  
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 
