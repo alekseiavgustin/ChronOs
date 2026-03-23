@@ -5,7 +5,7 @@ Chronos is built around a simple idea: you have a list of things you need to do,
 A fully offline weekly planner that lives in a single HTML file.  
 No accounts. No server. No dependencies. Just open and schedule.
 
-**[→ Open Chronos](https://chronos.oneapp.dev)** &nbsp;·&nbsp; [GitHub Pages mirror](https://alekseiavgustin.github.io/chronos)
+**[→ Open Chronos](https://chronos.oneapp.dev)** &nbsp;·&nbsp; [GitHub Pages mirror](https://alekseiavgustin.github.io/ChronOs/)
 
 ---
 
