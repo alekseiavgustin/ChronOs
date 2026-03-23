@@ -571,6 +571,12 @@ async def cmd_timezone(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         f"🔔 Rescheduled reminders for {count} active user(s).",
         parse_mode="Markdown",
     )
+
+async def post_init(app: Application):
+    scheduler.start()
+    log.info("Scheduler started")
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 #  ENTRY POINT
 # ═══════════════════════════════════════════════════════════════════════════
@@ -580,7 +586,7 @@ def main():
         print("❌  BOT_TOKEN environment variable not set!")
         return
 
-    app = Application.builder().token(BOT_TOKEN).build()
+    app = Application.builder().token(BOT_TOKEN).post_init(post_init).build()
 
     app.add_handler(CommandHandler("start",    cmd_start))
     app.add_handler(CommandHandler("help",     cmd_help))
@@ -594,8 +600,6 @@ def main():
     app.add_handler(CommandHandler("timezone", cmd_timezone))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
   
-
-    scheduler.start()
     log.info("Chronos Bot running — timezone: %s", TIMEZONE)
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
