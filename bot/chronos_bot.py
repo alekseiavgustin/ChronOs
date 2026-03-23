@@ -27,7 +27,10 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.date import DateTrigger
 
 # ── CONFIG — edit these two lines ─────────────────────────────────────────
-BOT_TOKEN = "YOUR_BOT_TOKEN_HERE"
+import os
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
+# or switch the two lines above for this line below (if self hosted):
+# BOT_TOKEN = "YOUR_BOT_TOKEN_HERE"
 TIMEZONE  = "Asia/Makassar"           # Bali = WITA (UTC+8)
 # ──────────────────────────────────────────────────────────────────────────
 
