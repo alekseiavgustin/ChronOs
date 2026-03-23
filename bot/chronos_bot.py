@@ -8,13 +8,14 @@ Sends reminders before events, lets you query today/week/next event.
 Setup:
   1. pip install "python-telegram-bot[job-queue]" apscheduler
   2. Talk to @BotFather on Telegram → /newbot → copy the token
-  3. Set BOT_TOKEN and TIMEZONE below
+  3. Set environment variables: BOT_TOKEN, TIMEZONE, ADMIN_CHAT_ID
   4. python chronos_bot.py
 """
 
 import base64
 import json
 import logging
+import os
 from datetime import datetime, timedelta, date
 from zoneinfo import ZoneInfo          # Python 3.9+
 
@@ -26,12 +27,11 @@ from telegram.ext import (
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.date import DateTrigger
 
-# ── CONFIG — edit these two lines ─────────────────────────────────────────
-import os
-BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
-# or switch the two lines above for this line below (if self hosted):
-# BOT_TOKEN = "YOUR_BOT_TOKEN_HERE"
-TIMEZONE  = "Asia/Makassar"           # Bali = WITA (UTC+8)
+# ── CONFIG — all via environment variables ─────────────────────────────────
+BOT_TOKEN      = os.environ.get("BOT_TOKEN", "")
+TIMEZONE       = os.environ.get("TIMEZONE", "Asia/Makassar")
+# Note: can be changed at runtime via /timezone command
+ADMIN_CHAT_ID  = int(os.environ.get("ADMIN_CHAT_ID", "0"))
 # ──────────────────────────────────────────────────────────────────────────
 
 DEFAULT_REMIND_MINS = 15
@@ -44,6 +44,7 @@ log = logging.getLogger(__name__)
 
 # user_state[chat_id] = { schedule, remind_minutes, job_ids[] }
 user_state: dict = {}
+stats = {"total_users": set(), "schedules_loaded": 0}
 scheduler = AsyncIOScheduler(timezone=TIMEZONE)
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -52,7 +53,6 @@ scheduler = AsyncIOScheduler(timezone=TIMEZONE)
 
 def parse_code(code: str) -> dict:
     """Decode a Chronos base64 save code → dict."""
-    # Handle missing base64 padding
     padded = code.strip() + "=" * (-len(code.strip()) % 4)
     raw = base64.b64decode(padded).decode("utf-8")
     return json.loads(raw)
@@ -86,7 +86,6 @@ def occurrences(ev: dict, ws_dt: datetime, days_ahead: int = 30) -> list[tuple]:
     out    = []
 
     if not rec:
-        # Single event
         d   = ev.get("day", 0)
         sm  = ev_start_min(ev, d)
         edt = ws_dt + timedelta(days=d, minutes=sm)
@@ -143,7 +142,7 @@ def fmt_dur(mins: int) -> str:
 
 
 def fmt_ev(ev: dict, s: datetime, e: datetime) -> str:
-    rec_icon = " 🔄" if ev.get("recurring") else ""
+    rec_icon  = " 🔄" if ev.get("recurring") else ""
     lock_icon = " 🔒" if ev.get("locked") else ""
     return (
         f"• {s.strftime('%H:%M')}–{e.strftime('%H:%M')} "
@@ -180,9 +179,9 @@ def reschedule(app: Application, chat_id: int) -> int:
         return 0
 
     clear_jobs(chat_id)
-    remind_mins = ud.get("remind_minutes", DEFAULT_REMIND_MINS)
-    now         = datetime.now(ZoneInfo(TIMEZONE))
-    job_ids     = []
+    remind_mins  = ud.get("remind_minutes", DEFAULT_REMIND_MINS)
+    now          = datetime.now(ZoneInfo(TIMEZONE))
+    job_ids      = []
     remind_count = 0
 
     for s, e, ev in all_upcoming(ud["schedule"], days_ahead=30):
@@ -248,13 +247,29 @@ Just paste your Chronos save code (from the 💾 Save button).
 /next       — Your next upcoming event
 /remind 15  — Set reminder lead-time in minutes (0 = disable)
 /status     — Schedule summary
+/timezone   — Show or change timezone
 /help       — This message
 """.strip()
 
 
 async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    cid = update.effective_chat.id
+    cid  = update.effective_chat.id
+    user = update.effective_user
     user_state.setdefault(cid, {"schedule": None, "remind_minutes": DEFAULT_REMIND_MINS, "job_ids": []})
+    stats["total_users"].add(cid)
+
+    # Notify admin of new user
+    if ADMIN_CHAT_ID and cid != ADMIN_CHAT_ID:
+        try:
+            name = user.username or user.first_name or str(cid)
+            await ctx.bot.send_message(
+                ADMIN_CHAT_ID,
+                f"👤 New user: @{name} (`{cid}`)",
+                parse_mode="Markdown",
+            )
+        except Exception:
+            pass
+
     await update.message.reply_text(HELP_TEXT, parse_mode="Markdown")
 
 
@@ -284,8 +299,8 @@ async def cmd_today(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 
 async def cmd_tomorrow(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    cid  = update.effective_chat.id
-    ud   = user_state.get(cid, {})
+    cid = update.effective_chat.id
+    ud  = user_state.get(cid, {})
     if not ud.get("schedule"):
         await update.message.reply_text("No schedule loaded yet — paste your Chronos save code!")
         return
@@ -305,8 +320,8 @@ async def cmd_tomorrow(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 
 async def cmd_week(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    cid  = update.effective_chat.id
-    ud   = user_state.get(cid, {})
+    cid = update.effective_chat.id
+    ud  = user_state.get(cid, {})
     if not ud.get("schedule"):
         await update.message.reply_text("No schedule loaded yet — paste your Chronos save code!")
         return
@@ -319,7 +334,7 @@ async def cmd_week(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("📭 Nothing in the next 7 days.")
         return
 
-    lines = ["📆 *Next 7 days*\n"]
+    lines   = ["📆 *Next 7 days*\n"]
     cur_day = None
     for s, e, ev in evts:
         d = s.date()
@@ -346,17 +361,17 @@ async def cmd_next(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("No schedule loaded yet — paste your Chronos save code!")
         return
 
-    tz  = ZoneInfo(TIMEZONE)
-    now = datetime.now(tz)
+    tz       = ZoneInfo(TIMEZONE)
+    now      = datetime.now(tz)
     upcoming = [(s, e, ev) for s, e, ev in all_upcoming(ud["schedule"], 7) if s > now]
 
     if not upcoming:
         await update.message.reply_text("📭 No upcoming events in the next 7 days.")
         return
 
-    s, e, ev = upcoming[0]
-    delta = s - now
-    hrs, rem = divmod(int(delta.total_seconds()), 3600)
+    s, e, ev  = upcoming[0]
+    delta     = s - now
+    hrs, rem  = divmod(int(delta.total_seconds()), 3600)
     mins_left = rem // 60
 
     if delta.days >= 1:
@@ -398,7 +413,10 @@ async def cmd_remind(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     count = reschedule(ctx.application, cid) if user_state[cid].get("schedule") else 0
 
     if mins == 0:
-        await update.message.reply_text("✅ Early reminders *disabled* — you'll still get a ping exactly at start time.", parse_mode="Markdown")
+        await update.message.reply_text(
+            "✅ Early reminders *disabled* — you'll still get a ping exactly at start time.",
+            parse_mode="Markdown",
+        )
     else:
         await update.message.reply_text(
             f"✅ Reminder lead-time set to *{mins} min*. {count} upcoming reminders rescheduled.",
@@ -424,8 +442,29 @@ async def cmd_status(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         f"*Events:* {len(sch.get('events',[]))}\n"
         f"*Unscheduled tasks:* {len(sch.get('tasks',[]))}\n"
         f"*Reminder lead-time:* {ud.get('remind_minutes', DEFAULT_REMIND_MINS)} min\n"
-        f"*Active jobs:* {len(ud.get('job_ids',[]))}\n\n"
+        f"*Active jobs:* {len(ud.get('job_ids',[]))}\n"
+        f"*Timezone:* {TIMEZONE}\n\n"
         "Paste a new Chronos code any time to update."
+    )
+    await update.message.reply_text(text, parse_mode="Markdown")
+
+
+async def cmd_admin(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    cid = update.effective_chat.id
+    if cid != ADMIN_CHAT_ID:
+        return  # silently ignore — non-admins don't even know this exists
+
+    total_jobs = sum(len(u.get("job_ids", [])) for u in user_state.values())
+    loaded     = sum(1 for u in user_state.values() if u.get("schedule"))
+
+    text = (
+        f"📊 *Chronos Bot — Admin Stats*\n\n"
+        f"👥 Unique users: {len(stats['total_users'])}\n"
+        f"📥 Schedules loaded: {stats['schedules_loaded']}\n"
+        f"🟢 Active sessions: {len(user_state)}\n"
+        f"📅 Sessions with schedule: {loaded}\n"
+        f"🔔 Scheduled reminder jobs: {total_jobs}\n"
+        f"🌐 Timezone: {TIMEZONE}"
     )
     await update.message.reply_text(text, parse_mode="Markdown")
 
@@ -438,7 +477,7 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     cid  = update.effective_chat.id
     text = update.message.text.strip()
 
-    # Heuristic: a Chronos save code is long, no spaces/newlines
+    # Heuristic: a Chronos save code is long with no spaces/newlines
     if len(text) > 50 and " " not in text and "\n" not in text:
         try:
             sch = parse_code(text)
@@ -447,10 +486,12 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
             user_state.setdefault(cid, {"schedule": None, "remind_minutes": DEFAULT_REMIND_MINS, "job_ids": []})
             user_state[cid]["schedule"] = sch
+            stats["total_users"].add(cid)
+            stats["schedules_loaded"] += 1
             count = reschedule(ctx.application, cid)
 
-            tz    = ZoneInfo(TIMEZONE)
-            today = datetime.now(tz).date()
+            tz         = ZoneInfo(TIMEZONE)
+            today      = datetime.now(tz).date()
             today_evts = sum(1 for s, _, _ in all_upcoming(sch, 1) if s.date() == today)
             week_evts  = len(all_upcoming(sch, 7))
 
@@ -481,14 +522,62 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             "Try /today, /tomorrow, /week, /next — or paste a new Chronos code to update your schedule."
         )
 
+async def cmd_timezone(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    global TIMEZONE
+    cid = update.effective_chat.id
 
+    if not ctx.args:
+        now = datetime.now(ZoneInfo(TIMEZONE))
+        await update.message.reply_text(
+            f"🌐 Current timezone: *{TIMEZONE}*\n"
+            f"🕐 Local time now: *{now.strftime('%H:%M, %a %d %b')}*\n\n"
+            "Change with `/timezone Asia/Singapore`\n"
+            "Other examples:\n"
+            "`/timezone Asia/Makassar` — Bali\n"
+            "`/timezone Asia/Singapore` — SGT\n"
+            "`/timezone Europe/Moscow` — Moscow\n"
+            "`/timezone Europe/London` — London\n"
+            "`/timezone America/New_York` — New York",
+            parse_mode="Markdown",
+        )
+        return
+
+    tz_input = ctx.args[0].strip()
+    try:
+        ZoneInfo(tz_input)  # validates it
+    except Exception:
+        await update.message.reply_text(
+            f"❌ Unknown timezone `{tz_input}`.\n"
+            "Use a standard tz name like `Asia/Singapore` or `Europe/London`.\n"
+            "Full list: https://en.wikipedia.org/wiki/List_of_tz_database_time_zones",
+            parse_mode="Markdown",
+        )
+        return
+
+    TIMEZONE = tz_input
+    scheduler.configure(timezone=TIMEZONE)
+
+    # Reschedule all active users with new timezone
+    count = 0
+    for uid in user_state:
+        if user_state[uid].get("schedule"):
+            reschedule(ctx.application, uid)
+            count += 1
+
+    now = datetime.now(ZoneInfo(TIMEZONE))
+    await update.message.reply_text(
+        f"✅ Timezone set to *{TIMEZONE}*\n"
+        f"🕐 Local time now: *{now.strftime('%H:%M, %a %d %b')}*\n"
+        f"🔔 Rescheduled reminders for {count} active user(s).",
+        parse_mode="Markdown",
+    )
 # ═══════════════════════════════════════════════════════════════════════════
 #  ENTRY POINT
 # ═══════════════════════════════════════════════════════════════════════════
 
 def main():
-    if BOT_TOKEN == "YOUR_BOT_TOKEN_HERE":
-        print("❌  Set BOT_TOKEN in chronos_bot.py first!")
+    if not BOT_TOKEN:
+        print("❌  BOT_TOKEN environment variable not set!")
         return
 
     app = Application.builder().token(BOT_TOKEN).build()
@@ -501,10 +590,13 @@ def main():
     app.add_handler(CommandHandler("next",     cmd_next))
     app.add_handler(CommandHandler("remind",   cmd_remind))
     app.add_handler(CommandHandler("status",   cmd_status))
+    app.add_handler(CommandHandler("admin",    cmd_admin))
+    app.add_handler(CommandHandler("timezone", cmd_timezone))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+  
 
     scheduler.start()
-    log.info("Chronos Bot running — waiting for messages...")
+    log.info("Chronos Bot running — timezone: %s", TIMEZONE)
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 
