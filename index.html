@@ -1,0 +1,2699 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chronos — Weekly Scheduler by Aleksei Avgustin</title>
+<meta name="description" content="Chronos is a beautiful weekly scheduler with drag-and-drop, recurring events, and calendar export. By Aleksei Avgustin.">
+<meta name="author" content="Aleksei Avgustin">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@300;400&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0a09;--cal:#0d0d0c;--cgl:#1a1a17;--cln:#252420;--ctx:#5a5950;--ctm:#383730;
+  --pan:#f2f0eb;--pan2:#e8e5de;--pt:#1c1b17;--pm:#9a9890;
+  --acc:#e05a2b;--acc2:#c04e23;--accg:rgba(224,90,43,.15);
+  --lck:#4a9eff;--wht:#f8f6f1;--divc:#d4d0c8;
+  --sh:0 4px 24px rgba(0,0,0,.22);--sh2:0 10px 44px rgba(0,0,0,.38);
+  --r:8px;
+}
+html,body{height:100%}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);height:100vh;overflow:hidden;display:flex;flex-direction:column;color:var(--pt)}
+/* ── SMALL SCREEN ─────────────────────────────────────────────────────── */
+#smallscreen{display:none;position:fixed;inset:0;background:var(--bg);z-index:99999;align-items:center;justify-content:center;padding:24px}
+#ss-card{background:#141412;border:1px solid var(--cln);border-radius:16px;padding:36px 32px;max-width:400px;text-align:center}
+#ss-logo{font-family:'Instrument Serif',serif;font-size:28px;color:var(--wht);letter-spacing:-.5px;margin-bottom:18px}
+#ss-logo em{color:var(--acc);font-style:italic}
+#ss-title{font-family:'DM Sans',sans-serif;font-size:16px;font-weight:600;color:var(--wht);margin-bottom:12px}
+#ss-msg{font-size:13px;color:var(--pm);line-height:1.6;margin-bottom:16px}
+#ss-email{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--acc);letter-spacing:.3px}
+@media(max-width:768px){#smallscreen{display:flex}#tb,#main{display:none!important}}
+
+/* ── TOOLBAR ──────────────────────────────────────────────────────────── */
+#tb{height:52px;background:#0f0f0e;border-bottom:1px solid var(--cln);display:flex;align-items:center;padding:0 16px;gap:8px;flex-shrink:0;z-index:100}
+.tb-l{display:flex;align-items:center;gap:8px;flex:1;min-width:0;overflow:hidden}
+.logo{font-family:'Instrument Serif',serif;font-size:19px;color:var(--wht);letter-spacing:-.5px;white-space:nowrap;flex-shrink:0}
+.logo em{color:var(--acc);font-style:italic}
+.proj{background:none;border:none;border-bottom:1px solid #2e2c28;color:#666;font-family:'JetBrains Mono',monospace;font-size:10px;padding:2px 4px;outline:none;letter-spacing:.8px;text-transform:uppercase;width:130px;transition:border-color .2s;flex-shrink:0}
+.proj:focus{border-color:var(--acc);color:var(--wht)}
+.vsep{width:1px;height:22px;background:var(--cln);flex-shrink:0}
+.xbtn{background:none;border:1px solid var(--cln);color:#666;font-size:11px;padding:5px 10px;border-radius:6px;cursor:pointer;transition:all .15s;white-space:nowrap;flex-shrink:0;display:flex;align-items:center;gap:5px}
+.xbtn:hover{border-color:var(--acc);color:var(--wht);background:var(--accg)}
+.xbtn:disabled{opacity:.25;pointer-events:none}
+.xbtn-new{color:var(--acc)!important;border-color:rgba(224,90,43,.3)!important}
+.xbtn-new:hover{background:var(--accg)!important;border-color:var(--acc)!important}
+.xbtn.undo-ok{animation:flashGreen .4s ease}
+@keyframes flashGreen{0%,100%{border-color:var(--cln)}50%{border-color:#5AAD8C}}
+.tb-r{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.arr{width:28px;height:28px;background:none;border:1px solid var(--cln);border-radius:6px;color:#666;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;transition:all .15s}
+.arr:hover{border-color:#555;color:var(--wht)}
+.todaybtn{font-family:'JetBrains Mono',monospace;font-size:10px;background:none;border:1px solid var(--cln);border-radius:6px;color:#666;padding:5px 10px;cursor:pointer;text-transform:uppercase;letter-spacing:.5px;transition:all .15s}
+.todaybtn:hover{border-color:#555;color:var(--wht)}
+#wlabel{font-family:'JetBrains Mono',monospace;font-size:10px;color:#555;text-align:center;letter-spacing:.3px;white-space:nowrap}
+#wlabel em{color:#666;font-style:normal;margin-left:6px}
+.wtog{display:flex;background:var(--bg);border:1px solid var(--cln);border-radius:6px;overflow:hidden}
+.wtog button{background:none;border:none;color:#555;font-family:'JetBrains Mono',monospace;font-size:10px;padding:5px 10px;cursor:pointer;transition:all .15s;letter-spacing:.5px}
+.wtog button.on{background:#1e1d1a;color:var(--wht)}
+
+/* ── MAIN ─────────────────────────────────────────────────────────────── */
+#main{flex:1;display:flex;overflow:hidden}
+#calp{flex:0 0 62%;display:flex;flex-direction:column;background:var(--cal);overflow:hidden}
+#calh{display:flex;background:#090908;border-bottom:1px solid var(--cln);flex-shrink:0}
+.tgut{width:52px;flex-shrink:0}
+.dh{flex:1;padding:8px 6px 6px;text-align:center;border-left:1px solid var(--cln);position:relative}
+.dh-n{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--ctx);text-transform:uppercase;letter-spacing:1px}
+.dh-d{font-family:'Instrument Serif',serif;font-size:20px;color:#3a3930;margin-top:1px}
+.dh-bar{height:3px;border-radius:2px;margin:4px 4px 0;overflow:hidden;background:var(--cln);display:flex}
+.dh-bar-seg{height:100%;transition:width .3s}
+.dh.today .dh-n,.dh.today .dh-d{color:var(--acc)}
+#calb{flex:1;overflow-y:auto;overflow-x:hidden;scroll-behavior:smooth}
+#calb::-webkit-scrollbar{width:5px}
+#calb::-webkit-scrollbar-track{background:var(--cal)}
+#calb::-webkit-scrollbar-thumb{background:#252420;border-radius:3px}
+#calgrid{display:flex}
+#tlabs{width:52px;flex-shrink:0;position:sticky;left:0;z-index:5;background:var(--cal)}
+.tl{height:80px;display:flex;align-items:flex-start;justify-content:flex-end;padding:4px 8px 0 0}
+.tl span{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--ctm);letter-spacing:.3px}
+#dcols{flex:1;display:flex;cursor:crosshair}
+.dcol{flex:1;border-left:1px solid var(--cln);position:relative;min-width:0;cursor:crosshair}
+.hrow{height:80px;border-bottom:1px solid var(--cln)}
+.hrow::after{content:'';display:block;height:50%;border-bottom:1px dashed var(--cgl)}
+
+/* ── EVENT BLOCKS ─────────────────────────────────────────────────────── */
+.eb{position:absolute;left:3px;right:3px;border-radius:7px;padding:5px 8px 4px;cursor:grab;overflow:hidden;z-index:2;user-select:none;transition:filter .1s,box-shadow .1s;animation:ebIn .18s ease-out}
+@keyframes ebIn{from{opacity:0;transform:scaleY(.85) translateY(-4px)}to{opacity:1;transform:none}}
+.eb:hover{filter:brightness(1.12);box-shadow:0 3px 14px rgba(0,0,0,.35)}
+.eb.locked{cursor:default;border-left:3px solid var(--lck)!important;filter:none}
+.eb.dragging{opacity:.16;pointer-events:none}
+.eb.done .eb-name{text-decoration:line-through;opacity:.55}
+.eb.done{filter:saturate(.35)!important;opacity:.7}
+.eb-name{font-size:11px;font-weight:600;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none}
+.eb-time{font-family:'JetBrains Mono',monospace;font-size:9px;color:rgba(255,255,255,.5);margin-top:1px;pointer-events:none}
+.eb-note{font-size:9px;color:rgba(255,255,255,.4);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px;pointer-events:none;font-style:italic}
+.eb-ics{position:absolute;top:4px;right:5px;font-size:9px;opacity:.8;pointer-events:none;display:flex;gap:2px}
+.eb-rsz{position:absolute;bottom:0;left:0;right:0;height:7px;cursor:ns-resize;background:rgba(255,255,255,.1);border-radius:0 0 7px 7px;opacity:0;transition:opacity .12s;z-index:3}
+.eb:not(.locked):hover .eb-rsz{opacity:1}
+/* recurring diagonal stripe */
+.eb.recurring::after{content:'';position:absolute;inset:0;background:repeating-linear-gradient(45deg,transparent,transparent 6px,rgba(255,255,255,.04) 6px,rgba(255,255,255,.04) 7px);pointer-events:none;border-radius:7px}
+
+
+/* draw-to-create on calendar */
+.draw-preview{position:absolute;left:3px;right:3px;border-radius:7px;border:2px solid var(--acc);background:var(--accg);pointer-events:none;z-index:3;display:none;transition:none}
+.draw-preview .dp-lbl{font-family:'JetBrains Mono',monospace;font-size:10px;color:rgba(255,255,255,.85);padding:4px 7px;font-weight:600;text-shadow:0 1px 3px rgba(0,0,0,.4)}
+
+/* drop preview */
+.dp{position:absolute;left:3px;right:3px;border-radius:7px;border:2px dashed var(--acc);background:var(--accg);pointer-events:none;z-index:1;display:none;transition:background .08s}
+.dp.no{background:rgba(232,93,74,.18);border-color:#E85D4A;border-style:solid}
+.dp-tip{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;color:rgba(255,255,255,.7);letter-spacing:.5px;text-shadow:0 1px 4px rgba(0,0,0,.5)}
+.dp.no .dp-tip{color:rgba(232,93,74,.8)}
+
+/* now line */
+.nwl{position:absolute;left:0;right:0;height:2px;background:var(--acc);z-index:10;pointer-events:none}
+.nwl::before{content:'';position:absolute;left:-3px;top:-3px;width:8px;height:8px;border-radius:50%;background:var(--acc)}
+
+/* ── DRAGGABLE DIVIDER ──────────────────────────────────────────────────── */
+#vdiv{width:6px;background:transparent;flex-shrink:0;cursor:col-resize;position:relative;z-index:10;transition:background .15s}
+#vdiv:hover,#vdiv.dragging{background:rgba(224,90,43,.35)}
+#vdiv::after{content:'';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:2px;height:32px;background:var(--cln);border-radius:1px;transition:background .15s}
+#vdiv:hover::after,#vdiv.dragging::after{background:var(--acc)}
+
+/* ── TASK PANEL ───────────────────────────────────────────────────────── */
+#taskp{flex:1;background:var(--pan);display:flex;flex-direction:column;overflow:hidden;min-width:0;position:relative}
+.ptabs{display:flex;border-bottom:1px solid var(--divc);flex-shrink:0}
+.ptab{flex:1;padding:10px 6px;background:none;border:none;font-family:'DM Sans',sans-serif;font-size:11px;font-weight:500;color:var(--pm);cursor:pointer;border-bottom:2px solid transparent;transition:all .15s;letter-spacing:.3px;text-transform:uppercase}
+.ptab.on{color:var(--pt);border-bottom-color:var(--pt)}
+#tabtasks{flex:1;display:flex;flex-direction:column;overflow:hidden}
+#tlist{flex:1;overflow-y:auto;padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+#tlist::-webkit-scrollbar{width:4px}
+#tlist::-webkit-scrollbar-track{background:var(--pan)}
+#tlist::-webkit-scrollbar-thumb{background:var(--divc);border-radius:2px}
+.emsg{text-align:center;padding:36px 20px;color:var(--pm)}
+.emsg .ei{font-size:30px;opacity:.38;margin-bottom:8px}
+.emsg p{font-size:13px;line-height:1.5}
+.emsg kbd{display:inline-block;background:var(--pan2);border:1px solid var(--divc);border-radius:4px;padding:1px 5px;font-size:10px;font-family:'JetBrains Mono',monospace}
+
+/* task cards */
+.tc{background:var(--pt);border-radius:12px;padding:14px 16px;cursor:grab;position:relative;transition:transform .12s,box-shadow .12s;user-select:none;overflow:hidden;animation:tcIn .2s ease-out;min-height:68px}
+@keyframes tcIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.tc::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;border-radius:12px 0 0 12px;background:var(--tcc,#888)}
+.tc:hover{transform:translateY(-1px);box-shadow:var(--sh)}
+.tc:active{cursor:grabbing}
+.tc-top{display:flex;align-items:flex-start;gap:6px}
+.tc-n{font-size:14px;font-weight:500;color:var(--wht);flex:1;pointer-events:none;line-height:1.3}
+.tc-acts{display:flex;gap:4px;opacity:.35;transition:opacity .15s;flex-shrink:0}
+.tc:hover .tc-acts{opacity:1}
+.cbtn{width:24px;height:24px;background:rgba(255,255,255,.07);border:none;border-radius:5px;color:rgba(255,255,255,.4);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:11px;transition:all .15s}
+.cbtn:hover{background:rgba(255,255,255,.14);color:#fff}
+.cbtn.del:hover{background:rgba(232,93,74,.25);color:#E85D4A}
+.tc-note{font-size:10px;color:rgba(255,255,255,.3);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none;font-style:italic}
+.tc-meta{display:flex;align-items:center;gap:7px;margin-top:8px;flex-wrap:wrap;pointer-events:none}
+.tc-dur{font-family:'JetBrains Mono',monospace;font-size:11px;color:rgba(255,255,255,.45)}
+.badge{font-size:10px;padding:3px 9px;border-radius:20px;font-weight:500}
+.badge-rec{background:rgba(74,158,255,.15);color:rgba(120,190,255,.9)}
+.badge-bw{background:rgba(140,90,220,.18);color:rgba(170,140,255,.9)}
+.badge-part{background:rgba(242,160,40,.15);color:rgba(242,200,80,.9)}
+.tc-grip{position:absolute;right:10px;bottom:10px;color:rgba(255,255,255,.08);font-size:11px;pointer-events:none;letter-spacing:2px}
+/* addarea bottom bar */
+#addarea{border-top:1px solid var(--divc);padding:10px 14px;flex-shrink:0;display:flex;gap:8px;align-items:center}
+#addbtn{flex:1;padding:10px 12px;background:var(--pt);border:none;border-radius:10px;color:rgba(255,255,255,.28);font-family:'DM Sans',sans-serif;font-size:13px;cursor:pointer;text-align:left;display:flex;align-items:center;gap:8px;transition:all .15s;min-width:0}
+#addbtn:hover{color:rgba(255,255,255,.6)}
+#addbtn .plus{font-size:17px;opacity:.4;flex-shrink:0}
+#clearbtn{width:36px;height:36px;background:var(--pt);border:none;border-radius:10px;color:rgba(255,255,255,.28);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s;flex-shrink:0}
+#clearbtn:hover{color:#E85D4A;background:rgba(232,93,74,.15)}
+#bulkbtn{width:36px;height:36px;background:var(--pt);border:none;border-radius:10px;color:rgba(255,255,255,.35);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s;flex-shrink:0}
+#bulkbtn:hover{color:rgba(255,255,255,.75);background:#2a2926}
+#bulkbtn svg{pointer-events:none}
+
+/* bulk import modal textarea */
+.bulk-example{background:#fff;border:1px solid var(--divc);border-radius:8px;padding:10px 13px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--pm);line-height:1.8;margin-top:2px}
+.bulk-example span{color:var(--acc)}
+.bulk-preview-list{display:flex;flex-direction:column;gap:5px;max-height:200px;overflow-y:auto;margin-top:2px}
+.bulk-prev-row{display:flex;align-items:center;gap:8px;padding:6px 10px;background:#fff;border:1px solid var(--divc);border-radius:7px;font-size:12px;animation:tcIn .15s ease-out}
+.bulk-prev-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.bulk-prev-n{flex:1;color:var(--pt);font-weight:500}
+.bulk-prev-meta{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--pm)}
+.bulk-prev-err{background:rgba(232,93,74,.08);border-color:rgba(232,93,74,.3)}
+.bulk-prev-err .bulk-prev-n{color:#E85D4A}
+
+/* TRASH ZONE — overlays the RIGHT panel when dragging an event */
+#trz{position:absolute;inset:0;display:none;flex-direction:column;z-index:50;pointer-events:none}
+#trz-top{flex:0 0 70%;display:flex;flex-direction:column;align-items:center;justify-content:center;border:2px dashed rgba(90,173,140,.3);background:rgba(90,173,140,.06);transition:background .12s,border-color .12s;border-radius:0}
+#trz-top.hot{background:rgba(90,173,140,.18);border-color:#5AAD8C}
+#trz-top .ti{font-size:32px;opacity:.5}
+#trz-top .tl2{font-family:'JetBrains Mono',monospace;font-size:10px;color:#5AAD8C;margin-top:8px;letter-spacing:.5px;text-transform:uppercase;opacity:.85;text-align:center}
+#trz-bot{flex:0 0 30%;display:flex;flex-direction:column;align-items:center;justify-content:center;border:2px dashed rgba(232,93,74,.3);border-top:none;background:rgba(232,93,74,.06);transition:background .12s,border-color .12s}
+#trz-bot.hot{background:rgba(232,93,74,.18);border-color:#E85D4A}
+#trz-bot .ti{font-size:28px;opacity:.5}
+#trz-bot .tl2{font-family:'JetBrains Mono',monospace;font-size:10px;color:#E85D4A;margin-top:6px;letter-spacing:.5px;text-transform:uppercase;opacity:.85;text-align:center}
+
+
+/* bulk import */
+#bulkFmt{display:none;overflow:hidden;transition:max-height .22s ease}
+#bulkFmt.open{display:block}
+.bulk-prev-item{display:flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--divc);border-radius:8px;padding:7px 10px;font-size:12px}
+.bulk-prev-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.bulk-prev-name{flex:1;font-weight:500;color:var(--pt)}
+.bulk-prev-meta{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--pm)}
+.bulk-prev-err{background:rgba(232,93,74,.07);border-color:rgba(232,93,74,.3)}
+.bulk-prev-err .bulk-prev-name{color:#E85D4A}
+
+/* category management in stats */
+.cat-mgmt-row{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid #eceae3}
+.cat-mgmt-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.cat-mgmt-name{font-size:13px;color:var(--pt);flex:1;font-weight:500}
+.cat-mgmt-used{font-size:10px;color:var(--pm);min-width:60px;text-align:right}
+.cat-mgmt-btn{width:24px;height:24px;background:none;border:1px solid var(--divc);border-radius:5px;cursor:pointer;font-size:11px;display:flex;align-items:center;justify-content:center;transition:all .12s;color:var(--pm)}
+.cat-mgmt-btn:hover{background:var(--pan2);color:var(--pt)}
+.cat-mgmt-btn.cat-del:hover:not(:disabled){background:rgba(232,93,74,.15);color:#E85D4A;border-color:rgba(232,93,74,.4)}
+.cat-mgmt-btn:disabled{opacity:.28;pointer-events:none}
+/* color swatches for cat editor */
+.cat-color-grid{display:flex;flex-wrap:wrap;gap:7px;margin-top:4px}
+.cat-color-sw{width:26px;height:26px;border-radius:50%;cursor:pointer;border:2.5px solid transparent;transition:all .12s}
+.cat-color-sw:hover{transform:scale(1.15)}
+.cat-color-sw.sel{border-color:var(--pt);transform:scale(1.15)}
+
+/* ── OUTLINE TAB ──────────────────────────────────────────────────────── */
+#tabout{display:none;flex:1;overflow-y:auto;padding:14px}
+.out-sec{margin-bottom:18px}
+.out-dh{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--pm);text-transform:uppercase;letter-spacing:1px;padding:4px 0;border-bottom:1px solid var(--divc);margin-bottom:8px;display:flex;align-items:center;justify-content:space-between}
+.out-dh-hrs{color:var(--pt);opacity:.45}
+.out-item{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #eceae3;cursor:pointer;transition:background .1s}
+.out-item:hover{background:rgba(0,0,0,.04);border-radius:4px;padding-left:4px;padding-right:4px}
+.out-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.out-tm{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--pm);width:90px;flex-shrink:0}
+.out-nm{font-size:12px;color:var(--pt);flex:1}
+.out-ct{font-size:10px;color:var(--pm)}
+.catleg{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px}
+.cl-i{display:flex;align-items:center;gap:4px;font-size:10px;color:var(--pm)}
+.cl-d{width:7px;height:7px;border-radius:50%}
+
+/* ── STATS TAB ────────────────────────────────────────────────────────── */
+#tabstats{display:none;flex:1;overflow-y:auto;padding:14px}
+.stats-total{font-family:'Instrument Serif',serif;font-size:32px;color:var(--pt);margin-bottom:2px}
+.stats-sub{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--pm);margin-bottom:20px;letter-spacing:.3px}
+.stats-sec-h{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--pm);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;padding-bottom:4px;border-bottom:1px solid var(--divc)}
+.stat-bar-row{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.stat-bar-lbl{font-size:12px;color:var(--pt);width:72px;flex-shrink:0}
+.stat-bar-wrap{flex:1;height:8px;background:var(--pan2);border-radius:4px;overflow:hidden}
+.stat-bar-fill{height:100%;border-radius:4px;transition:width .5s cubic-bezier(.34,1.2,.64,1)}
+.stat-bar-val{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--pm);width:38px;text-align:right;flex-shrink:0}
+.stats-days{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-top:6px}
+.sd{background:#fff;border:1px solid var(--divc);border-radius:8px;padding:7px 6px;text-align:center}
+.sd-n{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--pm);text-transform:uppercase;letter-spacing:.5px}
+.sd-v{font-family:'Instrument Serif',serif;font-size:18px;color:var(--pt);margin-top:2px}
+.sd-u{font-size:9px;color:var(--pm)}
+.sd.best{border-color:var(--acc);background:rgba(224,90,43,.06)}
+.sd.best .sd-v{color:var(--acc)}
+
+/* ── MODALS ───────────────────────────────────────────────────────────── */
+.ov{position:fixed;inset:0;background:rgba(0,0,0,.55);backdrop-filter:blur(6px);z-index:1000;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .2s}
+.ov.vis{opacity:1;pointer-events:all}
+.modal{background:var(--pan);border-radius:16px;padding:26px;width:450px;box-shadow:var(--sh2);transform:translateY(12px);transition:transform .22s cubic-bezier(.34,1.2,.64,1);max-height:90vh;overflow-y:auto}
+.ov.vis .modal{transform:translateY(0)}
+.modal h2{font-family:'Instrument Serif',serif;font-size:22px;color:var(--pt);margin-bottom:18px}
+.modal-sub{color:var(--pm);font-size:12px;margin-bottom:16px;line-height:1.5}
+.fg{margin-bottom:14px}
+.fl{display:block;font-size:10px;font-weight:600;color:var(--pm);letter-spacing:.8px;text-transform:uppercase;margin-bottom:6px}
+.fi{width:100%;padding:9px 13px;background:#fff;border:1px solid var(--divc);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:13px;color:var(--pt);outline:none;transition:border-color .15s;resize:vertical}
+.fi:focus{border-color:var(--acc)}
+.frow{display:flex;gap:10px}
+.frow .fg{flex:1}
+.dur-row{display:flex;gap:7px;align-items:center}
+.dur-sep{color:var(--pm);font-size:12px}
+.fact{display:flex;gap:8px;justify-content:flex-end;margin-top:20px;flex-wrap:wrap}
+.btn{padding:9px 16px;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:500;cursor:pointer;border:none;transition:all .15s}
+.btn-s{background:var(--pan2);color:var(--pt)}
+.btn-s:hover{background:var(--divc)}
+.btn-a{background:var(--acc);color:#fff}
+.btn-a:hover{background:var(--acc2)}
+.btn-d{background:rgba(232,93,74,.12);color:#E85D4A}
+.btn-d:hover{background:rgba(232,93,74,.22)}
+
+/* category swatches */
+.cat-sw{display:flex;flex-wrap:wrap;gap:6px}
+.csw{display:flex;align-items:center;gap:6px;padding:6px 10px;border-radius:8px;border:1.5px solid var(--divc);cursor:pointer;font-size:12px;background:#fff;color:var(--pt);transition:all .12s;user-select:none}
+.csw:hover{border-color:#aaa}
+.csw.sel{border-color:var(--pt);font-weight:600}
+.csw .dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+
+/* recurring toggle */
+.rec-tog{display:flex;border:1.5px solid var(--divc);border-radius:9px;overflow:hidden;background:#fff}
+.rec-tog button{flex:1;padding:8px 4px;border:none;background:none;font-size:11px;color:var(--pm);cursor:pointer;transition:all .12s;border-right:1px solid var(--divc);white-space:nowrap}
+.rec-tog button:last-child{border-right:none}
+.rec-tog button.sel{background:var(--pt);color:#fff;font-weight:500}
+
+/* day-of-week circles */
+.dow-row{display:flex;gap:5px;flex-wrap:wrap;margin-top:4px}
+.dcircle{width:34px;height:34px;border-radius:50%;border:1.5px solid var(--divc);background:#fff;font-size:11px;font-weight:600;cursor:pointer;color:var(--pm);transition:all .12px;display:flex;align-items:center;justify-content:center;user-select:none}
+.dcircle:hover{border-color:#999;color:var(--pt)}
+.dcircle.sel{background:var(--pt);border-color:var(--pt);color:#fff}
+
+/* cut preview */
+.cut-prev{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.cut-p{flex:1;min-width:70px;background:#fff;border:1px solid var(--divc);border-radius:8px;padding:9px;text-align:center}
+.cut-pn{font-weight:600;font-size:11px;color:var(--pt)}
+.cut-pd{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--pm);margin-top:3px}
+.cut-pi{font-size:9px;color:var(--pm);margin-top:3px}
+
+/* code output */
+.code-out{background:#111;border:1px solid #2a2926;border-radius:8px;padding:11px;font-family:'JetBrains Mono',monospace;font-size:10px;color:#88b;word-break:break-all;max-height:120px;overflow-y:auto;margin-top:8px}
+
+/* keyboard shortcuts modal */
+.kkeys{display:grid;grid-template-columns:auto 1fr;gap:6px 16px;margin-top:4px}
+.kk{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--pt)}
+kbd{display:inline-block;background:var(--pan2);border:1px solid var(--divc);border-radius:4px;padding:1px 6px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--pt)}
+.kd{font-size:12px;color:var(--pm)}
+
+/* context menu */
+#evmenu{position:fixed;background:#141412;border:1px solid #2a2926;border-radius:10px;padding:5px;z-index:2000;box-shadow:var(--sh2);min-width:172px;display:none}
+.mi{display:flex;align-items:center;gap:9px;padding:7px 11px;border-radius:6px;cursor:pointer;font-size:12px;color:#bbb;transition:all .1s}
+.mi:hover{background:#222;color:#fff}
+.mi.dg{color:#E85D4A}
+.mi.dg:hover{background:rgba(232,93,74,.12)}
+.mi.ok{color:#5AAD8C}
+.mi.ok:hover{background:rgba(90,173,140,.1)}
+.mi-i{font-size:13px;width:16px;text-align:center}
+.msp{height:1px;background:#2a2926;margin:4px 0}
+
+/* ghost */
+#ghost{position:fixed;pointer-events:none;z-index:9999;display:none;opacity:.9;transform:rotate(2deg) scale(.92);background:#141412;border-radius:10px;padding:9px 13px;box-shadow:var(--sh2);max-width:220px;border-left:4px solid #888}
+#gn{font-size:12px;font-weight:500;color:#fff}
+#gd{font-family:'JetBrains Mono',monospace;font-size:9px;color:rgba(255,255,255,.4);margin-top:2px}
+
+/* toasts */
+#toasts{position:fixed;bottom:22px;right:22px;z-index:9990;display:flex;flex-direction:column;gap:8px;pointer-events:none}
+.toast{background:#1c1b18;border:1px solid #2a2926;border-radius:9px;padding:9px 14px;font-size:12px;color:#bbb;font-family:'DM Sans',sans-serif;transform:translateX(130%);transition:transform .28s cubic-bezier(.34,1.3,.64,1);box-shadow:0 4px 22px rgba(0,0,0,.45);max-width:240px;line-height:1.4}
+.toast.show{transform:translateX(0)}
+.toast.ok{border-color:rgba(90,173,140,.35);color:#5AAD8C}
+.toast.warn{border-color:rgba(242,160,40,.3);color:#F2A028}
+.toast.err{border-color:rgba(232,93,74,.35);color:#E85D4A}
+
+/* print */
+@media print{
+  *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
+  body.printing #calb{overflow:visible!important;height:auto!important}
+  #tb,#taskp,#vdiv,#ghost,#evmenu,#trz,#toasts,.ov{display:none!important}
+  html,body{height:auto!important;overflow:visible!important;background:#fff!important}
+  #main{height:auto!important;overflow:visible!important}
+  #calp{flex:1!important;width:100%!important;background:#fff!important;overflow:visible!important}
+  #calb{overflow:visible!important;height:auto!important}
+  #calgrid{overflow:visible!important}
+  .dh-n{color:#999!important}.dh-d{color:#333!important}.tl span{color:#aaa!important}
+  .hrow,.dcol,.dh,#calh{border-color:#ddd!important}
+  .hrow::after{border-color:#eee!important;border-bottom-style:dotted!important}
+  .eb{box-shadow:none!important;border:1px solid rgba(0,0,0,.1)!important}
+  .eb-rsz{display:none!important}
+  .nwl,.draw-preview{display:none!important}
+  .dh-bar{display:none!important}
+  #calh{background:#fff!important;border-bottom:1px solid #ccc!important}
+}
+</style>
+</head>
+<body>
+
+
+<!-- SMALL SCREEN BANNER -->
+<div id="smallscreen">
+  <div id="ss-card">
+    <div id="ss-logo">Chron<em>os</em></div>
+    <div id="ss-title">Not available on this device</div>
+    <div id="ss-msg">Chronos by Aleksei Avgustin is designed for desktop use and requires a screen wider than 768px. Please open it on a laptop or desktop computer.</div>
+    <div id="ss-email">Alekseiavgustin25@gmail.com</div>
+  </div>
+</div>
+
+<div id="tb">
+  <div class="tb-l">
+    <div class="logo">Chron<em>os</em></div>
+    <div class="vsep"></div>
+    <input class="proj" id="projName" placeholder="PROJECT" value="MY SCHEDULE">
+    <div class="vsep"></div>
+    <button class="xbtn" id="undoBtn" title="Undo (Ctrl+Z)" onclick="undo()">↩ Undo</button>
+    <button class="xbtn" id="redoBtn" title="Redo (Ctrl+Y)" onclick="redo()">↪ Redo</button>
+    <div class="vsep"></div>
+    <button class="xbtn xbtn-new" onclick="confirmNew()" title="Start a fresh schedule">✦ New</button>
+    <div class="vsep"></div>
+    <button class="xbtn" id="saveBtn">💾 Save</button>
+    <button class="xbtn" id="loadBtn">📂 Load</button>
+    <button class="xbtn" id="icsBtn">📅 Apple Cal</button>
+    <button class="xbtn" id="pdfBtn">📄 PDF</button>
+    <button class="xbtn" onclick="openM('modKeys')" title="Keyboard shortcuts (?)">⌨</button>
+    <button class="xbtn" onclick="openM('modTut')" title="Quick tutorial">? Tutorial</button>
+    <button class="xbtn" onclick="openAI()" title="AI assistant guide" style="color:#7B6DD9;border-color:rgba(123,109,217,.35)">✦ AI</button>
+  </div>
+  <div class="tb-r">
+    <button class="todaybtn" id="todayBtn" title="Jump to today (T)">Today</button>
+    <button class="arr" id="prevW" title="Previous week (←)">‹</button>
+    <span id="wlabel"></span>
+    <button class="arr" id="nextW" title="Next week (→)">›</button>
+    <div class="wtog">
+      <button id="w1btn" onclick="setWV(1)">W1</button>
+      <button id="w2btn" onclick="setWV(2)">W2</button>
+    </div>
+  </div>
+</div>
+
+<div id="main">
+  <div id="calp">
+    <div id="calh"><div class="tgut"></div></div>
+    <div id="calb">
+      <div id="calgrid">
+        <div id="tlabs"></div>
+        <div id="dcols"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="vdiv" title="Drag to resize"></div>
+
+  <div id="taskp">
+    <div id="trz"><div id="trz-top"><div class="ti">↩</div><div class="tl2">Return to tasks</div></div><div id="trz-bot"><div class="ti">🗑</div><div class="tl2">Delete</div></div></div>
+    <div class="ptabs">
+      <button class="ptab on" onclick="switchTab('tasks',this)">Tasks</button>
+      <button class="ptab" onclick="switchTab('outline',this)">Outline</button>
+      <button class="ptab" onclick="switchTab('stats',this)">Stats</button>
+    </div>
+    <div id="tabtasks">
+      <div id="tlist"></div>
+      <div id="addarea">
+        <button id="addbtn" onclick="openAdd()"><span class="plus">+</span> Add task...</button>
+        <button id="clearbtn" onclick="confirmClearTasks()" title="Clear all tasks">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="1,3 13,3"/><path d="M4,3V2h6v1"/><path d="M2,3l1,9a1,1,0,0,0,1,1h6a1,1,0,0,0,1-1l1-9"/><line x1="5" y1="6" x2="5" y2="10"/><line x1="9" y1="6" x2="9" y2="10"/></svg>
+        </button>
+        <button id="bulkbtn" onclick="openBulk()" title="Add multiple tasks at once">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+            <line x1="3" y1="4" x2="13" y2="4"/><line x1="3" y1="8" x2="13" y2="8"/><line x1="3" y1="12" x2="10" y2="12"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+    <div id="tabout"></div>
+    <div id="tabstats"></div>
+  </div>
+</div>
+
+<div id="ghost"><div id="gn"></div><div id="gd"></div></div>
+<div id="toasts"></div>
+
+<div id="evmenu">
+  <div class="mi" onclick="mAct('edit')"><span class="mi-i">✏️</span> Edit</div>
+  <div class="mi" onclick="mAct('dup')"><span class="mi-i">⎘</span> Duplicate</div>
+  <div class="mi ok" onclick="mAct('done')"><span class="mi-i" id="doneic">✓</span><span id="donetx"> Mark done</span></div>
+  <div class="mi" onclick="mAct('lock')"><span class="mi-i" id="lkic">🔒</span><span id="lktx"> Lock</span></div>
+  <div class="msp"></div>
+  <div class="mi dg" onclick="mAct('del')"><span class="mi-i">🗑</span> Remove</div>
+</div>
+
+<!-- HOUR RANGE MODAL -->
+<div class="ov" id="modHr">
+<div class="modal" style="width:340px">
+  <h2>Calendar Hours</h2>
+  <p class="modal-sub">Set which hours are visible on the calendar grid.</p>
+  <div class="frow">
+    <div class="fg">
+      <label class="fl">Start hour</label>
+      <select class="fi" id="hrStart" style="cursor:pointer"></select>
+    </div>
+    <div class="fg">
+      <label class="fl">End hour</label>
+      <select class="fi" id="hrEnd" style="cursor:pointer"></select>
+    </div>
+  </div>
+  <p id="hrPreview" style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--pm);margin-top:-6px;margin-bottom:4px"></p>
+  <div class="fact">
+    <button class="btn btn-s" onclick="closeM('modHr')">Cancel</button>
+    <button class="btn btn-a" onclick="saveHrRange()">Apply</button>
+  </div>
+</div>
+</div>
+
+<!-- CLEAR TASKS CONFIRM MODAL -->
+<div class="ov" id="modClearTasks">
+<div class="modal" style="width:360px">
+  <h2>Clear All Tasks</h2>
+  <p class="modal-sub">This will remove all tasks from the task list. Events already placed on the calendar will stay. This action can be undone with Ctrl+Z.</p>
+  <div class="fact">
+    <button class="btn btn-s" onclick="closeM('modClearTasks')">Cancel</button>
+    <button class="btn btn-d" onclick="doClearTasks()">Clear all tasks</button>
+  </div>
+</div>
+</div>
+
+<!-- TUTORIAL MODAL -->
+<div class="ov" id="modTut">
+<div class="modal" style="width:520px;max-height:88vh">
+  <h2>Welcome to Chronos</h2>
+  <p class="modal-sub" style="margin-bottom:20px">A quick walkthrough of the key features.</p>
+
+  <div style="display:flex;flex-direction:column;gap:18px;font-size:13px;line-height:1.6;color:var(--pt)">
+
+    <div style="display:flex;gap:14px;align-items:flex-start">
+      <div style="font-size:24px;flex-shrink:0;margin-top:2px">📋</div>
+      <div>
+        <div style="font-weight:600;margin-bottom:3px">Create tasks on the right</div>
+        <div style="color:var(--pm)">Hit <kbd>N</kbd> or the <strong>+ Add task</strong> button. Set a name, duration, category, and optionally a recurring schedule (weekly or every 2 weeks on specific days).</div>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:14px;align-items:flex-start">
+      <div style="font-size:24px;flex-shrink:0;margin-top:2px">🖱</div>
+      <div>
+        <div style="font-weight:600;margin-bottom:3px">Drag tasks onto the calendar</div>
+        <div style="color:var(--pm)">Drag any task card from the right panel onto an empty time slot on the left. The drop preview shows the exact time. A red outline means a conflict — find a free slot.</div>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:14px;align-items:flex-start">
+      <div style="font-size:24px;flex-shrink:0;margin-top:2px">✏️</div>
+      <div>
+        <div style="font-weight:600;margin-bottom:3px">Draw events directly on the calendar</div>
+        <div style="color:var(--pm)">Click and drag downward on any empty calendar space to draw a new event. A quick-create dialog will pop up when you release.</div>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:14px;align-items:flex-start">
+      <div style="font-size:24px;flex-shrink:0;margin-top:2px">⚙️</div>
+      <div>
+        <div style="font-weight:600;margin-bottom:3px">Edit & manage events</div>
+        <div style="color:var(--pm)"><strong>Double-click</strong> an event to edit its name, time, category, and notes. <strong>Right-click</strong> for a context menu with duplicate, lock, mark done, and remove.</div>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:14px;align-items:flex-start">
+      <div style="font-size:24px;flex-shrink:0;margin-top:2px">↩</div>
+      <div>
+        <div style="font-weight:600;margin-bottom:3px">Move & remove events</div>
+        <div style="color:var(--pm)">Drag events to reposition them. Resize by dragging the bottom edge. To remove, drag an event to the right panel — the <strong>top zone</strong> returns it to the task list; the <strong>bottom zone</strong> deletes it.</div>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:14px;align-items:flex-start">
+      <div style="font-size:24px;flex-shrink:0;margin-top:2px">🔄</div>
+      <div>
+        <div style="font-weight:600;margin-bottom:3px">Recurring events & biweekly view</div>
+        <div style="color:var(--pm)">Tasks can repeat every week or every 2 weeks on chosen days. Use <strong>W1 / W2</strong> in the top-right to toggle which biweekly group is visible.</div>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:14px;align-items:flex-start">
+      <div style="font-size:24px;flex-shrink:0;margin-top:2px">💾</div>
+      <div>
+        <div style="font-weight:600;margin-bottom:3px">Save & export</div>
+        <div style="color:var(--pm)"><strong>Save</strong> produces a code you can paste back into Load on any device. <strong>Apple Cal</strong> exports a date-range .ics file for import into any calendar app. <strong>PDF</strong> opens a print-ready view.</div>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:14px;align-items:flex-start">
+      <div style="font-size:24px;flex-shrink:0;margin-top:2px">📊</div>
+      <div>
+        <div style="font-weight:600;margin-bottom:3px">Stats tab</div>
+        <div style="color:var(--pm)">See hours by category and by day. Adjust your daily hour target (changes the bar under each date). Manage custom categories. Set calendar display hours.</div>
+      </div>
+    </div>
+
+    <div style="background:var(--pan2);border-radius:10px;padding:12px 14px;font-size:11px;color:var(--pm);line-height:1.7">
+      <strong style="color:var(--pt)">Keyboard shortcuts:</strong>
+      &nbsp;<kbd>N</kbd> new task &nbsp;·&nbsp;
+      <kbd>L</kbd> bulk import &nbsp;·&nbsp;
+      <kbd>T</kbd> today &nbsp;·&nbsp;
+      <kbd>←</kbd><kbd>→</kbd> weeks &nbsp;·&nbsp;
+      <kbd>Ctrl+Z</kbd> undo &nbsp;·&nbsp;
+      <kbd>?</kbd> shortcuts
+    </div>
+
+  </div>
+
+  <div class="fact" style="margin-top:22px">
+    <button class="btn btn-a" onclick="closeM('modTut')" style="width:100%">Got it — let me schedule!</button>
+  </div>
+</div>
+</div>
+
+<!-- AI ASSISTANT MODAL -->
+<div class="ov" id="modAI">
+<div class="modal" style="width:560px;max-height:92vh">
+  <h2 style="display:flex;align-items:center;gap:10px">
+    <span style="background:linear-gradient(135deg,#7B6DD9,#4A8DEF);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">✦ AI Assistant</span>
+  </h2>
+
+  <!-- Tabs -->
+  <div style="display:flex;gap:0;border-bottom:1px solid var(--divc);margin-bottom:18px">
+    <button class="ai-tab on" onclick="switchAITab('guide',this)" style="flex:1;padding:9px 6px;background:none;border:none;font-size:11px;font-weight:500;color:var(--pt);cursor:pointer;border-bottom:2px solid var(--pt);letter-spacing:.3px;text-transform:uppercase">Guide</button>
+    <button class="ai-tab" onclick="switchAITab('prompt',this)" style="flex:1;padding:9px 6px;background:none;border:none;font-size:11px;font-weight:500;color:var(--pm);cursor:pointer;border-bottom:2px solid transparent;letter-spacing:.3px;text-transform:uppercase">AI Prompt</button>
+    <button class="ai-tab" onclick="switchAITab('schedule',this)" style="flex:1;padding:9px 6px;background:none;border:none;font-size:11px;font-weight:500;color:var(--pm);cursor:pointer;border-bottom:2px solid transparent;letter-spacing:.3px;text-transform:uppercase">Share Schedule</button>
+  </div>
+
+  <!-- Guide Tab -->
+  <div id="aiTabGuide" style="display:flex;flex-direction:column;gap:14px;font-size:13px;line-height:1.6;color:var(--pt)">
+    <div style="background:rgba(123,109,217,.1);border:1px solid rgba(123,109,217,.25);border-radius:10px;padding:14px 16px">
+      <div style="font-weight:600;margin-bottom:6px;color:#7B6DD9">🤖 Works best with Claude</div>
+      <div style="font-size:12px;color:var(--pm);line-height:1.6">Chronos was built with Claude AI and the prompt format is optimised for it. Claude understands the bulk format perfectly and can analyse your pasted schedule. Any LLM works, but Claude gives the best results.</div>
+    </div>
+
+    <div>
+      <div style="font-weight:600;margin-bottom:8px">What AI can do for you:</div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <div style="display:flex;gap:10px;align-items:flex-start">
+          <span style="font-size:16px;flex-shrink:0">📝</span>
+          <div><strong>Generate task lists</strong> — describe your week or goals, ask the AI to format them as Chronos bulk import text. Copy and paste straight into the <em>List (⋮)</em> button.</div>
+        </div>
+        <div style="display:flex;gap:10px;align-items:flex-start">
+          <span style="font-size:16px;flex-shrink:0">📊</span>
+          <div><strong>Analyse your schedule</strong> — paste your saved schedule code (from the <em>Share Schedule</em> tab) into a chat and ask AI to review it for balance, overload, or missing tasks.</div>
+        </div>
+        <div style="display:flex;gap:10px;align-items:flex-start">
+          <span style="font-size:16px;flex-shrink:0">🔄</span>
+          <div><strong>Optimise & reschedule</strong> — paste your schedule, explain constraints ("I need 2h focus time every morning"), and ask the AI to suggest a revised task list you can re-import.</div>
+        </div>
+        <div style="display:flex;gap:10px;align-items:flex-start">
+          <span style="font-size:16px;flex-shrink:0">💡</span>
+          <div><strong>Estimate durations</strong> — list your projects and ask AI to estimate realistic time blocks, then format them for import.</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="background:var(--pan2);border-radius:10px;padding:12px 14px;font-size:11px;color:var(--pm);line-height:1.7">
+      <strong style="color:var(--pt)">Workflow tip:</strong> Open Claude at <a href="https://claude.ai" target="_blank" style="color:var(--acc)">claude.ai</a> side-by-side with Chronos. Paste the AI Prompt once to set context, then have a back-and-forth conversation to refine your schedule — import new lists as you iterate.
+    </div>
+  </div>
+
+  <!-- AI Prompt Tab -->
+  <div id="aiTabPrompt" style="display:none">
+    <p style="font-size:12px;color:var(--pm);margin-bottom:12px;line-height:1.5">Copy this prompt into any AI assistant (Claude recommended). It teaches the AI exactly how Chronos works so it can generate task lists you can import directly, and understand schedules you share with it.</p>
+    <div style="position:relative">
+      <textarea id="aiPromptText" readonly style="width:100%;height:240px;background:#0f0f0e;border:1px solid var(--cln);border-radius:8px;padding:12px 14px;font-family:'JetBrains Mono',monospace;font-size:10px;color:#d0cfc8;line-height:1.7;resize:none;outline:none;caret-color:var(--acc)"></textarea>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <button class="btn btn-a" onclick="copyAIPrompt()" style="flex:1">⎘ Copy prompt to clipboard</button>
+      <a href="https://claude.ai" target="_blank" class="btn btn-s" style="display:flex;align-items:center;gap:6px;text-decoration:none;font-size:12px;font-weight:500">Open Claude ↗</a>
+    </div>
+    <p style="font-size:10px;color:var(--pm);margin-top:8px;line-height:1.5">After pasting the prompt, describe your goals or paste your schedule. Ask for a task list and import it via the <kbd>L</kbd> button or the list icon in the task panel.</p>
+  </div>
+
+  <!-- Share Schedule Tab -->
+  <div id="aiTabSchedule" style="display:none">
+    <p style="font-size:12px;color:var(--pm);margin-bottom:12px;line-height:1.5">Copy your current schedule as readable text to share with AI for analysis, or paste the save code for full fidelity.</p>
+    <div style="margin-bottom:10px">
+      <label class="fl" style="margin-bottom:5px">Human-readable schedule (for pasting into chat)</label>
+      <textarea id="aiScheduleText" readonly style="width:100%;height:180px;background:#0f0f0e;border:1px solid var(--cln);border-radius:8px;padding:12px 14px;font-family:'JetBrains Mono',monospace;font-size:10px;color:#d0cfc8;line-height:1.7;resize:none;outline:none"></textarea>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-a" onclick="copyScheduleText()" style="flex:1">⎘ Copy readable schedule</button>
+      <button class="btn btn-s" onclick="refreshScheduleText()" style="font-size:12px">↻ Refresh</button>
+    </div>
+    <p style="font-size:10px;color:var(--pm);margin-top:8px;line-height:1.5">Paste this into Claude along with the AI Prompt (first tab) to get analysis, suggestions, and new task lists to import back.</p>
+  </div>
+
+  <div class="fact" style="margin-top:16px">
+    <button class="btn btn-s" onclick="closeM('modAI')">Close</button>
+  </div>
+</div>
+</div>
+
+<!-- TASK / EVENT MODAL -->
+<div class="ov" id="modTask">
+<div class="modal">
+  <h2 id="modTitle">New Task</h2>
+  <input type="hidden" id="editId">
+  <div class="fg">
+    <label class="fl">Name</label>
+    <input type="text" class="fi" id="tName" placeholder="e.g. Deep work session" autocomplete="off">
+  </div>
+
+  <!-- TIME SECTION: only shown when editing a placed event -->
+  <div id="evTimeFg" style="display:none">
+    <div class="frow" style="margin-bottom:0">
+      <div class="fg">
+        <label class="fl">Start time</label>
+        <div style="display:flex;align-items:center;gap:6px">
+          <input type="number" class="fi" id="evStartH" min="0" max="23" style="width:62px" oninput="syncEvTime()">
+          <span class="dur-sep">:</span>
+          <input type="number" class="fi" id="evStartM" min="0" max="59" step="15" style="width:62px" oninput="syncEvTime()">
+        </div>
+      </div>
+      <div class="fg">
+        <label class="fl">End time</label>
+        <div style="display:flex;align-items:center;gap:6px">
+          <input type="number" class="fi" id="evEndH" min="0" max="23" style="width:62px" oninput="syncEvTimeFromEnd()">
+          <span class="dur-sep">:</span>
+          <input type="number" class="fi" id="evEndM" min="0" max="59" step="15" style="width:62px" oninput="syncEvTimeFromEnd()">
+        </div>
+      </div>
+    </div>
+    <p id="evTimeSummary" style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--pm);margin-top:6px;margin-bottom:14px"></p>
+  </div>
+
+  <div class="frow">
+    <div class="fg">
+      <label class="fl" id="durLabel">Duration</label>
+      <div class="dur-row">
+        <input type="number" class="fi" id="tH" min="0" max="23" value="1" style="width:62px" oninput="syncDurFromFields()">
+        <span class="dur-sep">h</span>
+        <input type="number" class="fi" id="tM" min="0" max="59" step="15" value="0" style="width:62px" oninput="syncDurFromFields()">
+        <span class="dur-sep">m</span>
+      </div>
+    </div>
+  </div>
+  <div class="fg">
+    <label class="fl">Category</label>
+    <div class="cat-sw" id="catSw"></div>
+  </div>
+  <div class="fg">
+    <label class="fl">Notes <span style="font-weight:400;letter-spacing:0;text-transform:none;font-size:9px">(optional)</span></label>
+    <textarea class="fi" id="tNotes" rows="2" placeholder="Add details…" style="resize:vertical;min-height:60px"></textarea>
+  </div>
+  <div class="fg">
+    <label class="fl">Repeats</label>
+    <div class="rec-tog">
+      <button data-v="" onclick="setRec(this)">Once</button>
+      <button data-v="weekly" onclick="setRec(this)">Every week</button>
+      <button data-v="biweekly" onclick="setRec(this)">Every 2 wks</button>
+    </div>
+  </div>
+  <div class="fg" id="dowFg" style="display:none">
+    <label class="fl">On which days</label>
+    <div class="dow-row" id="dowRow"></div>
+    <p style="font-size:10px;color:var(--pm);margin-top:6px;line-height:1.4">Once placed on the calendar, each day's time can be adjusted independently by dragging.</p>
+  </div>
+  <div class="fact">
+    <button class="btn btn-s" onclick="closeM('modTask')">Cancel</button>
+    <button class="btn btn-a" onclick="saveForm()">Save</button>
+  </div>
+</div>
+</div>
+
+<!-- NEW / RESET MODAL -->
+<div class="ov" id="modNew">
+<div class="modal">
+  <h2>Start Over</h2>
+  <p class="modal-sub">This will clear all tasks and events. Your current schedule will be lost unless you saved it first.</p>
+  <div class="fact">
+    <button class="btn btn-s" onclick="closeM('modNew')">Cancel</button>
+    <button class="btn btn-a" onclick="doNew()">Start fresh</button>
+  </div>
+</div>
+</div>
+
+<!-- QUICK CREATE MODAL (draw on calendar) -->
+<div class="ov" id="modQuick">
+<div class="modal">
+  <h2 id="qcTitle">New Event</h2>
+  <input type="hidden" id="qcDay">
+  <input type="hidden" id="qcStart">
+  <input type="hidden" id="qcDur">
+  <div class="fg">
+    <label class="fl">Name</label>
+    <input type="text" class="fi" id="qcName" placeholder="Event name…" autocomplete="off">
+  </div>
+  <div class="fg">
+    <label class="fl">Category</label>
+    <div class="cat-sw" id="qcCatSw"></div>
+  </div>
+  <div class="fg">
+    <label class="fl">Time & Duration</label>
+    <p id="qcTimeLabel" style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--pt);background:#fff;border:1px solid var(--divc);border-radius:8px;padding:9px 13px"></p>
+  </div>
+  <div class="fact">
+    <button class="btn btn-s" onclick="closeM('modQuick')">Cancel</button>
+    <button class="btn btn-a" onclick="saveQuick()">Add to calendar</button>
+  </div>
+</div>
+</div>
+
+<!-- CATEGORY EDIT MODAL -->
+<div class="ov" id="modCatEdit">
+<div class="modal">
+  <h2 id="catEditTitle">New Category</h2>
+  <div class="fg">
+    <label class="fl">Name</label>
+    <input type="text" class="fi" id="catEditName" placeholder="e.g. Exercise" maxlength="24" autocomplete="off">
+  </div>
+  <div class="fg">
+    <label class="fl">Color — presets</label>
+    <div class="cat-color-grid" id="catEditColors"></div>
+  </div>
+  <div class="fg">
+    <label class="fl">Or custom hex</label>
+    <input type="text" class="fi" id="catEditHex" placeholder="#RRGGBB" maxlength="7" spellcheck="false"
+      oninput="this.style.borderColor=/^#[0-9a-fA-F]{6}$/.test(this.value.trim())?this.value.trim():'var(--divc)'">
+  </div>
+  <div class="fact">
+    <button class="btn btn-s" onclick="closeM('modCatEdit')">Cancel</button>
+    <button class="btn btn-a" onclick="saveCatEdit()">Save</button>
+  </div>
+</div>
+</div>
+
+<!-- ICS EXPORT MODAL -->
+<div class="ov" id="modICS">
+<div class="modal">
+  <h2>Export to Apple Calendar</h2>
+  <p class="modal-sub">Set the date range. Recurring events expand into individual occurrences.</p>
+  <div class="frow">
+    <div class="fg">
+      <label class="fl">Start date (W1 begins)</label>
+      <input type="date" class="fi" id="icsStart">
+    </div>
+    <div class="fg">
+      <label class="fl">End date</label>
+      <input type="date" class="fi" id="icsEnd">
+    </div>
+  </div>
+  <div class="fg">
+    <label class="fl">Quick range</label>
+    <div style="display:flex;flex-wrap:wrap;gap:6px">
+      <button class="btn btn-s" style="font-size:11px;padding:6px 11px" onclick="icsSetRange(4)">4 weeks</button>
+      <button class="btn btn-s" style="font-size:11px;padding:6px 11px" onclick="icsSetRange(8)">2 months</button>
+      <button class="btn btn-s" style="font-size:11px;padding:6px 11px" onclick="icsSetRange(13)">3 months</button>
+      <button class="btn btn-s" style="font-size:11px;padding:6px 11px" onclick="icsSetRange(26)">6 months</button>
+      <button class="btn btn-s" style="font-size:11px;padding:6px 11px" onclick="icsSetRange(52)">1 year</button>
+    </div>
+  </div>
+  <div class="fg">
+    <label class="fl">Calendar name</label>
+    <input type="text" class="fi" id="icsCalName" placeholder="My Schedule">
+  </div>
+  <p style="font-size:10px;color:var(--pm);line-height:1.5">
+    Biweekly events assigned to <b>W1</b> appear on weeks 1,3,5… from start date; <b>W2</b> on weeks 2,4,6…
+  </p>
+  <div class="fact">
+    <button class="btn btn-s" onclick="closeM('modICS')">Cancel</button>
+    <button class="btn btn-a" onclick="doExportICS()">Download .ics</button>
+  </div>
+</div>
+</div>
+
+<!-- DAILY GOAL MODAL -->
+<div class="ov" id="modGoal">
+<div class="modal" style="width:340px">
+  <h2>Daily Target Hours</h2>
+  <p class="modal-sub">This controls the fill bar below each day's date in the calendar header.</p>
+  <div style="display:flex;align-items:center;gap:12px;margin:4px 0 16px">
+    <input type="range" id="goalPopSlider" min="1" max="16" value="8" step="0.5"
+      style="flex:1;accent-color:var(--acc);cursor:pointer"
+      oninput="document.getElementById('goalPopVal').textContent=this.value+'h'">
+    <span id="goalPopVal" style="font-family:'JetBrains Mono',monospace;font-size:18px;color:var(--pt);min-width:40px;text-align:right;font-weight:600">8h</span>
+  </div>
+  <div class="fact">
+    <button class="btn btn-s" onclick="closeM('modGoal')">Cancel</button>
+    <button class="btn btn-a" onclick="saveGoal()">Apply</button>
+  </div>
+</div>
+</div>
+
+<div class="ov" id="modBulk">
+<div class="modal" style="width:500px">
+  <h2>Add a List of Tasks</h2>
+
+  <!-- FORMAT HINT -->
+  <div id="bulkFmtToggle" onclick="const f=document.getElementById('bulkFmt');f.classList.toggle('open');document.getElementById('bulkFmtArrow').style.transform=f.classList.contains('open')?'rotate(90deg)':''"
+    style="cursor:pointer;user-select:none;display:flex;align-items:center;gap:7px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--pm);text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px">
+    <span id="bulkFmtArrow" style="font-size:12px;transition:transform .18s">▶</span> Format guide
+  </div>
+  <div id="bulkFmt" style="background:var(--pan2);border-radius:10px;padding:14px 16px;margin-bottom:14px;font-size:12px;line-height:1.7;color:var(--pt)">
+    <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--pm);letter-spacing:.5px;margin-bottom:8px;text-transform:uppercase">One task per line — fields separated by commas:</div>
+    <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--pt);background:#fff;border-radius:7px;padding:10px 12px;border:1px solid var(--divc);line-height:2">
+      <span style="color:var(--acc)">Name</span><span style="color:var(--pm)">, </span><span style="color:#7B6DD9">duration</span><span style="color:var(--pm)">, </span><span style="color:#5AAD8C">category</span><span style="color:var(--pm)">, </span><span style="color:#4A8DEF">repeat</span><br>
+      <span style="color:var(--pm);font-size:9px">examples:</span><br>
+      <span style="color:var(--pt)">Morning run, 45m, Health</span><br>
+      <span style="color:var(--pt)">Deep work, 2h, Work, weekly, Mon Wed Fri</span><br>
+      <span style="color:var(--pt)">Team sync, 30m, Work, biweekly, Mon Wed</span><br>
+      <span style="color:var(--pt)">Read, 1h 30m</span>
+    </div>
+    <div style="margin-top:10px;font-size:11px;color:var(--pm);line-height:1.6">
+      <b style="color:var(--pt)">Duration:</b> <code style="background:#fff;padding:1px 5px;border-radius:4px;border:1px solid var(--divc)">45m</code> &nbsp; <code style="background:#fff;padding:1px 5px;border-radius:4px;border:1px solid var(--divc)">2h</code> &nbsp; <code style="background:#fff;padding:1px 5px;border-radius:4px;border:1px solid var(--divc)">1h 30m</code> &nbsp; <code style="background:#fff;padding:1px 5px;border-radius:4px;border:1px solid var(--divc)">90</code> (minutes)<br>
+      <b style="color:var(--pt)">Category:</b> Work · Personal · Health · Social · Learning · Other (or any custom)<br>
+      <b style="color:var(--pt)">Repeat:</b> <code style="background:#fff;padding:1px 5px;border-radius:4px;border:1px solid var(--divc)">weekly</code> or <code style="background:#fff;padding:1px 5px;border-radius:4px;border:1px solid var(--divc)">biweekly</code> — then day names (Mon, Tue, Wed…)
+    </div>
+  </div>
+
+  <!-- INPUT -->
+  <div class="fg">
+    <label class="fl">Your tasks</label>
+    <textarea class="fi" id="bulkInput" rows="9" placeholder="Morning run, 45m, Health&#10;Deep work, 2h, Work, weekly, Mon Wed Fri&#10;Team sync, 30m, Work, biweekly, Mon&#10;Read, 1h 30m" style="font-family:'JetBrains Mono',monospace;font-size:12px;line-height:1.7;resize:vertical;min-height:180px"></textarea>
+  </div>
+
+  <!-- PREVIEW -->
+  <div id="bulkPreview" style="display:none;margin-bottom:14px">
+    <div class="fl" style="margin-bottom:6px">Preview <span id="bulkCount" style="font-weight:400;color:var(--pm)"></span></div>
+    <div id="bulkPreviewList" style="display:flex;flex-direction:column;gap:5px;max-height:160px;overflow-y:auto"></div>
+  </div>
+  <div id="bulkErrors" style="display:none;background:rgba(232,93,74,.08);border:1px solid rgba(232,93,74,.25);border-radius:8px;padding:10px 12px;font-size:11px;color:#E85D4A;line-height:1.6;margin-bottom:10px;font-family:'JetBrains Mono',monospace"></div>
+
+  <div class="fact">
+    <button class="btn btn-s" onclick="closeM('modBulk')">Cancel</button>
+    <button class="btn btn-a" id="bulkAddBtn" onclick="bulkCommit()" style="opacity:.35;cursor:not-allowed">Add tasks</button>
+  </div>
+</div>
+</div>
+
+<!-- CUT MODAL -->
+<div class="ov" id="modCut">
+<div class="modal">
+  <h2>Cut Task</h2>
+  <p class="modal-sub">Split into equal parts to schedule separately. Parts inherit the recurring schedule.</p>
+  <input type="hidden" id="cutId">
+  <div class="fg">
+    <label class="fl">Parts</label>
+    <select class="fi" id="cutN" onchange="updCutPrev()" style="cursor:pointer">
+      <option value="2">2 parts</option>
+      <option value="3">3 parts</option>
+      <option value="4">4 parts</option>
+    </select>
+  </div>
+  <div class="cut-prev" id="cutPrev"></div>
+  <div class="fact">
+    <button class="btn btn-s" onclick="closeM('modCut')">Cancel</button>
+    <button class="btn btn-a" onclick="doCut()">Cut</button>
+  </div>
+</div>
+</div>
+
+<!-- DELETE RECURRING MODAL -->
+<div class="ov" id="modDelRec">
+<div class="modal">
+  <h2>Remove Event</h2>
+  <p class="modal-sub" id="delRecMsg"></p>
+  <input type="hidden" id="delRecEid">
+  <div class="fact">
+    <button class="btn btn-s" onclick="closeM('modDelRec')">Cancel</button>
+    <button class="btn btn-d" onclick="delRecThis()">This occurrence only</button>
+    <button class="btn btn-d" onclick="delRecAll()">All occurrences</button>
+  </div>
+</div>
+</div>
+
+<!-- SAVE MODAL -->
+<div class="ov" id="modSave">
+<div class="modal">
+  <h2>Save Schedule</h2>
+  <p class="modal-sub">Copy this code. Paste it into Load to restore your schedule on any device.</p>
+  <div class="code-out" id="codeOut"></div>
+  <div class="fact">
+    <button class="btn btn-s" onclick="closeM('modSave')">Close</button>
+    <button class="btn btn-a" id="copyBtn" onclick="copyCode()">Copy to clipboard</button>
+  </div>
+</div>
+</div>
+
+<!-- LOAD MODAL -->
+<div class="ov" id="modLoad">
+<div class="modal">
+  <h2>Load Schedule</h2>
+  <p class="modal-sub">Paste your saved code below. This replaces the current schedule.</p>
+  <textarea class="fi" id="loadIn" rows="5" placeholder="Paste code here…"></textarea>
+  <div class="fact">
+    <button class="btn btn-s" onclick="closeM('modLoad')">Cancel</button>
+    <button class="btn btn-a" onclick="doLoad()">Load</button>
+  </div>
+</div>
+</div>
+
+<!-- KEYBOARD SHORTCUTS MODAL -->
+<div class="ov" id="modKeys">
+<div class="modal">
+  <h2>Keyboard Shortcuts</h2>
+  <div class="kkeys">
+    <div class="kk"><kbd>←</kbd> <kbd>→</kbd></div><div class="kd">Navigate weeks</div>
+    <div class="kk"><kbd>T</kbd></div><div class="kd">Jump to today</div>
+    <div class="kk"><kbd>Ctrl</kbd>+<kbd>Z</kbd></div><div class="kd">Undo last action</div>
+    <div class="kk"><kbd>Ctrl</kbd>+<kbd>Y</kbd></div><div class="kd">Redo</div>
+    <div class="kk"><kbd>N</kbd></div><div class="kd">New task</div>
+    <div class="kk"><kbd>L</kbd></div><div class="kd">Add task list (bulk import)</div>
+    <div class="kk"><kbd>1</kbd> <kbd>2</kbd></div><div class="kd">Switch W1 / W2 biweekly view</div>
+    <div class="kk"><kbd>?</kbd></div><div class="kd">Show this help</div>
+    <div class="kk"><kbd>Dbl-click</kbd></div><div class="kd">Edit event on calendar</div>
+    <div class="kk"><kbd>Right-click</kbd></div><div class="kd">Event context menu</div>
+    <div class="kk"><kbd>Drag → right</kbd></div><div class="kd">Remove event from calendar</div>
+  </div>
+  <div class="fact"><button class="btn btn-s" onclick="closeM('modKeys')">Close</button></div>
+</div>
+</div>
+
+<script>
+// ── CONSTANTS ──────────────────────────────────────────────────────────────
+const HPX=80, SNAP=15, THRESH=5;
+let HS=6, HE=24; // adjustable calendar hours
+const DAYS=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+const MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+let CATS=[
+  {id:'Work',     c:'#4A8DEF'},
+  {id:'Personal', c:'#D96B8B'},
+  {id:'Health',   c:'#5AAD8C'},
+  {id:'Social',   c:'#F2A028'},
+  {id:'Learning', c:'#7B6DD9'},
+  {id:'Other',    c:'#E85D4A'},
+];
+const DEFAULT_CATS=CATS.map(x=>({...x}));
+const CC = id => { const ct=CATS.find(x=>x.id===id); if(ct) return ct.c; const oth=CATS.find(x=>x.id==='Other'); return oth?oth.c:'#888'; };
+let dayGoalHours = 8; // configurable daily target
+let returnToOrigPos = false; // return tasks to original list position
+
+// ── STATE ──────────────────────────────────────────────────────────────────
+// Event schema: id, name, cat, dur, notes, locked, done, tid,
+//   day, startMin, recurring(''/weekly/biweekly),
+//   recDays(int[]), recPos({dayIdx:startMin}), bwGroup(1|2)
+let S={tasks:[],events:[],ws:getMon(new Date()),bwView:1,nid:1};
+let drag=null,pDrag=null,resize=null,menuEid=null;
+let selCat='Work',selRec='',selDow=[];
+let hist=[],fut=[];  // undo/redo stacks
+
+// ── DATE UTILS ─────────────────────────────────────────────────────────────
+function getMon(d){const r=new Date(d),w=r.getDay();r.setDate(r.getDate()-(w===0?6:w-1));r.setHours(0,0,0,0);return r;}
+function addD(d,n){const r=new Date(d);r.setDate(r.getDate()+n);return r;}
+function isToday(d){const t=new Date();return d.getDate()===t.getDate()&&d.getMonth()===t.getMonth()&&d.getFullYear()===t.getFullYear();}
+function ft(m){return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');}
+function fd(m){if(!m||m<=0) return '—';const h=Math.floor(m/60),mm=m%60;return h&&mm?`${h}h ${mm}m`:h?`${h}h`:`${mm}m`;}
+function sn(m){return Math.round(m/SNAP)*SNAP;}
+
+// ── UNDO / REDO ────────────────────────────────────────────────────────────
+function snap(){
+  hist.push(JSON.stringify({tasks:S.tasks,events:S.events,nid:S.nid,cats:JSON.parse(JSON.stringify(CATS)),dayGoalHours,calHs:HS,calHe:HE}));
+  if(hist.length>40) hist.shift();
+  fut=[];
+}
+function undo(){
+  if(!hist.length){toast('Nothing to undo','warn');return;}
+  fut.push(JSON.stringify({tasks:S.tasks,events:S.events,nid:S.nid,cats:JSON.parse(JSON.stringify(CATS)),dayGoalHours}));
+  const p=JSON.parse(hist.pop());
+  S.tasks=p.tasks;S.events=p.events;S.nid=p.nid;
+  if(p.cats&&p.cats.length) CATS.splice(0,CATS.length,...p.cats);
+  if(p.dayGoalHours!=null) dayGoalHours=p.dayGoalHours;
+  if(p.calHs!=null){HS=p.calHs;HE=p.calHe;}
+  render();toast('Undone','ok');
+  const b=document.getElementById('undoBtn');
+  b.classList.add('undo-ok');setTimeout(()=>b.classList.remove('undo-ok'),450);
+}
+function redo(){
+  if(!fut.length){toast('Nothing to redo','warn');return;}
+  hist.push(JSON.stringify({tasks:S.tasks,events:S.events,nid:S.nid,cats:JSON.parse(JSON.stringify(CATS)),dayGoalHours,calHs:HS,calHe:HE}));
+  const p=JSON.parse(fut.pop());
+  S.tasks=p.tasks;S.events=p.events;S.nid=p.nid;
+  if(p.cats&&p.cats.length) CATS.splice(0,CATS.length,...p.cats);
+  if(p.dayGoalHours!=null) dayGoalHours=p.dayGoalHours;
+  if(p.calHs!=null){HS=p.calHs;HE=p.calHe;}
+  render();toast('Redone','ok');
+}
+
+// ── TOAST ──────────────────────────────────────────────────────────────────
+function toast(msg,type=''){
+  const t=document.createElement('div');
+  t.className=`toast ${type}`;t.textContent=msg;
+  document.getElementById('toasts').appendChild(t);
+  requestAnimationFrame(()=>requestAnimationFrame(()=>t.classList.add('show')));
+  setTimeout(()=>{t.classList.remove('show');setTimeout(()=>t.remove(),350);},2600);
+}
+
+// ── RECURRING HELPERS ──────────────────────────────────────────────────────
+function showDays(ev){
+  const r=ev.recurring||'';
+  const base=ev.day??0;
+  const days=(ev.recDays&&ev.recDays.length)?ev.recDays:[base];
+  if(!r) return [base];
+  if(r==='weekly') return days;
+  if(r==='biweekly') return S.bwView===(ev.bwGroup||1)?days:[];
+  return [base];
+}
+function startOf(ev,di){
+  if(ev.recPos&&ev.recPos[di]!=null) return ev.recPos[di];
+  return ev.startMin;
+}
+
+// ── CONFLICT ───────────────────────────────────────────────────────────────
+function hasConflict(di,startMin,dur,excludeEid=null){
+  const end=startMin+dur;
+  return S.events.some(ev=>{
+    if(ev.id===excludeEid) return false;
+    if(!showDays(ev).includes(di)) return false;
+    const s=startOf(ev,di);
+    return startMin<s+ev.dur&&end>s;
+  });
+}
+function hasAnyConflict(days,startMin,dur,excludeEid=null){
+  return days.some(di=>hasConflict(di,startMin,dur,excludeEid));
+}
+
+// ── RENDER ─────────────────────────────────────────────────────────────────
+function render(){
+  rHead();rTLabs();rDCols();rEvents();rTasks();rWLabel();rNowLine();
+  // Only re-render tab content if that tab is active
+  if(document.getElementById('tabstats').style.display!=='none') rStats();
+  if(document.getElementById('tabout').style.display!=='none') rOutline();
+}
+
+function rWLabel(){
+  const e=addD(S.ws,6);
+  // Count total scheduled hours this week
+  let totalMins=0;
+  S.events.forEach(ev=>{showDays(ev).forEach(()=>{totalMins+=ev.dur;});});
+  const th=Math.round(totalMins/60*10)/10;
+  document.getElementById('wlabel').innerHTML=
+    `${S.ws.getDate()} ${MON[S.ws.getMonth()]} — ${e.getDate()} ${MON[e.getMonth()]} ${e.getFullYear()}`;
+  document.getElementById('w1btn').classList.toggle('on',S.bwView===1);
+  document.getElementById('w2btn').classList.toggle('on',S.bwView===2);
+}
+
+function rHead(){
+  const h=document.getElementById('calh');
+  while(h.children.length>1) h.removeChild(h.lastChild);
+  // Pre-calc hours per day for stats bar
+  const dayMins=Array(7).fill(0);
+  S.events.forEach(ev=>{showDays(ev).forEach(di=>{if(di>=0&&di<7)dayMins[di]+=ev.dur;});});
+  const maxMins=Math.max(...dayMins,1);
+  for(let i=0;i<7;i++){
+    const d=addD(S.ws,i);
+    const el=document.createElement('div');
+    el.className='dh'+(isToday(d)?' today':'');
+    const goalMins=dayGoalHours*60;
+    const pct=Math.min(dayMins[i]/goalMins*100,100);
+    el.innerHTML=`<div class="dh-n">${DAYS[i]}</div><div class="dh-d">${d.getDate()}</div><div class="dh-bar"><div class="dh-bar-seg" style="width:${pct}%;background:${pct>=100?'#E85D4A':pct>=80?'#F2A028':'var(--acc)'}"></div></div>`;
+    h.appendChild(el);
+  }
+}
+
+function rTLabs(){
+  const c=document.getElementById('tlabs');c.innerHTML='';
+  for(let h=HS;h<HE;h++){
+    const el=document.createElement('div');el.className='tl';
+    el.innerHTML=`<span>${String(h).padStart(2,'0')}:00</span>`;
+    c.appendChild(el);
+  }
+}
+
+function rDCols(){
+  const c=document.getElementById('dcols');c.innerHTML='';
+  for(let d=0;d<7;d++){
+    const col=document.createElement('div');col.className='dcol';col.dataset.day=d;
+    for(let h=HS;h<HE;h++){const r=document.createElement('div');r.className='hrow';col.appendChild(r);}
+    const dp=document.createElement('div');dp.className='dp';dp.id='dp-'+d;
+    dp.innerHTML='<span class="dp-tip"></span>';
+    col.appendChild(dp);
+    c.appendChild(col);
+  }
+}
+
+function rEvents(){
+  document.querySelectorAll('.eb').forEach(el=>el.remove());
+  S.events.forEach(ev=>{
+    showDays(ev).forEach(di=>{
+      const col=document.querySelector(`.dcol[data-day="${di}"]`);
+      if(col) col.appendChild(mkBlock(ev,di));
+    });
+  });
+}
+
+function mkBlock(ev,di){
+  const b=document.createElement('div');
+  b.className='eb'+(ev.locked?' locked':'')+(ev.done?' done':'')+(ev.recurring?' recurring':'');
+  b.dataset.eid=ev.id;b.dataset.di=di;
+  const sm=startOf(ev,di);
+  b.style.cssText=`top:${(sm-HS*60)*(HPX/60)}px;height:${Math.max(ev.dur*(HPX/60),22)}px;background:${CC(ev.cat)}`;
+  const noteHtml=ev.notes?`<div class="eb-note">${ev.notes.split('\n')[0]}</div>`:'';
+  b.innerHTML=`
+    <div class="eb-name">${ev.name}</div>
+    <div class="eb-time">${ft(sm)}–${ft(sm+ev.dur)}</div>
+    ${noteHtml}
+    <div class="eb-ics">${ev.done?'✓ ':''} ${ev.locked?'🔒':''} ${ev.recurring?'🔄':''}</div>
+    <div class="eb-rsz"></div>`;
+  b.addEventListener('dblclick',e=>{e.stopPropagation();closeMenu();openEditEv(ev.id);});
+  b.addEventListener('contextmenu',e=>{e.preventDefault();showMenu(e,ev.id);});
+  b.addEventListener('mousedown',e=>{
+    if(e.target.classList.contains('eb-rsz')){startResize(e,ev.id,di,b);return;}
+    if(e.button!==0) return;
+    e.preventDefault();e.stopPropagation();
+    if(ev.locked){showMenu(e,ev.id);return;}
+    const r=b.getBoundingClientRect();
+    pDrag={type:'event',eid:ev.id,di,dur:ev.dur,name:ev.name,color:CC(ev.cat),block:b,
+      startX:e.clientX,startY:e.clientY,offsetY:e.clientY-r.top};
+  });
+  return b;
+}
+
+function rTasks(){
+  const c=document.getElementById('tlist');c.innerHTML='';
+  if(!S.tasks.length){
+    c.innerHTML=`<div class="emsg"><div class="ei">📋</div><p>No tasks yet.<br>Hit <kbd>N</kbd> or the button below.</p></div>`;
+    return;
+  }
+  S.tasks.forEach(t=>{
+    const col=CC(t.cat);
+    const el=document.createElement('div');
+    el.className='tc';el.dataset.tid=t.id;
+    el.style.setProperty('--tcc',col);
+    let rb='';
+    if(t.rec==='weekly') rb=`<span class="badge badge-rec">weekly</span>`;
+    if(t.rec==='biweekly') rb=`<span class="badge badge-bw">biweekly</span>`;
+    const noteHtml=t.notes?`<div class="tc-note">${t.notes.split('\n')[0]}</div>`:'';
+    el.innerHTML=`
+      <div class="tc-top">
+        <div class="tc-n">${t.name}</div>
+        <div class="tc-acts">
+          <button class="cbtn" title="Edit" onclick="openEditTask(${t.id})">✏️</button>
+          <button class="cbtn" title="Duplicate task" onclick="dupTask(${t.id})">⎘</button>
+          <button class="cbtn" title="Cut into parts" onclick="openCut(${t.id})">✂️</button>
+          <button class="cbtn del" title="Delete" onclick="delTask(${t.id})">✕</button>
+        </div>
+      </div>
+      ${noteHtml}
+      <div class="tc-meta">
+        <span class="tc-dur">${fd(t.dur)}</span>
+        <span class="badge" style="background:${col}22;color:${col}">${t.cat}</span>
+        ${rb}
+        ${t.part?`<span class="badge badge-part">${t.part}</span>`:''}
+      </div>
+      <div class="tc-grip">⠿⠿</div>`;
+    el.addEventListener('mousedown',e=>{
+      if(e.target.closest('.cbtn')) return;
+      if(e.button!==0) return;
+      e.preventDefault();
+      pDrag={type:'task',tid:t.id,dur:t.dur,name:t.name,color:col,
+        startX:e.clientX,startY:e.clientY,offsetY:0};
+    });
+    c.appendChild(el);
+  });
+}
+
+function rOutline(){
+  const c=document.getElementById('tabout');c.innerHTML='';
+  const leg=document.createElement('div');leg.className='catleg';
+  CATS.forEach(ct=>{leg.innerHTML+=`<div class="cl-i"><div class="cl-d" style="background:${ct.c}"></div>${ct.id}</div>`;});
+  c.appendChild(leg);
+  const byD=Array.from({length:7},()=>[]);
+  S.events.forEach(ev=>{showDays(ev).forEach(di=>{if(di>=0&&di<7)byD[di].push({ev,di});});});
+  let any=false;
+  byD.forEach((items,i)=>{
+    if(!items.length) return;any=true;
+    items.sort((a,b)=>startOf(a.ev,a.di)-startOf(b.ev,b.di));
+    const date=addD(S.ws,i);
+    const dayMins=items.reduce((s,{ev})=>s+ev.dur,0);
+    const sec=document.createElement('div');sec.className='out-sec';
+    sec.innerHTML=`<div class="out-dh">${DAYS[i]} ${date.getDate()} ${MON[date.getMonth()]}<span class="out-dh-hrs">${fd(dayMins)}</span></div>`;
+    items.forEach(({ev,di})=>{
+      const sm=startOf(ev,di);
+      const item=document.createElement('div');item.className='out-item';
+      item.innerHTML=`<div class="out-dot" style="background:${CC(ev.cat)}"></div><span class="out-tm">${ft(sm)}–${ft(sm+ev.dur)}</span><span class="out-nm">${ev.done?'✓ ':''}<span style="${ev.done?'text-decoration:line-through;opacity:.5':''}">${ev.name}</span></span><span class="out-ct">${ev.cat}</span>`;
+      // Click outline item to scroll calendar to it
+      item.onclick=()=>{
+        const top=(sm-HS*60)*(HPX/60)-80;
+        document.getElementById('calb').scrollTo({top:Math.max(0,top),behavior:'smooth'});
+        // Switch to tasks tab properly
+        const tasksBtn=document.querySelector('.ptab');
+        document.querySelectorAll('.ptab').forEach(t=>t.classList.remove('on'));
+        tasksBtn?.classList.add('on');
+        document.getElementById('tabtasks').style.display='flex';
+        document.getElementById('tabout').style.display='none';
+        document.getElementById('tabstats').style.display='none';
+      };
+      sec.appendChild(item);
+    });
+    c.appendChild(sec);
+  });
+  if(!any) c.innerHTML+='<div class="emsg"><div class="ei">📆</div><p>No events this week.</p></div>';
+}
+
+// ── STATS + SETTINGS ──────────────────────────────────────────────────────
+let editingCatId=null; // null=new, string=editing existing
+let _catPickedColor=''; // tracks currently selected color in cat editor
+const PRESET_COLORS=['#4A8DEF','#D96B8B','#5AAD8C','#F2A028','#7B6DD9','#E85D4A','#E8B84B','#4ABFC8','#B05FE8','#E8734A','#6EC97A','#A0A0A0'];
+
+function rStats(){
+  const c=document.getElementById('tabstats');
+  c.innerHTML='';
+
+  // ── totals ──
+  const catMins={};CATS.forEach(ct=>{catMins[ct.id]=0;});
+  const dayMins=Array(7).fill(0);
+  let total=0;
+  S.events.forEach(ev=>{
+    showDays(ev).forEach(di=>{
+      catMins[ev.cat]=(catMins[ev.cat]||0)+ev.dur;
+      if(di>=0&&di<7) dayMins[di]+=ev.dur;
+      total+=ev.dur;
+    });
+  });
+  const totalH=total/60,th=Math.floor(totalH),tm=Math.round((totalH%1)*60);
+  const goalMins=dayGoalHours*60*7;
+  const goalPct=Math.min(Math.round(total/Math.max(goalMins,1)*100),999);
+
+  // ── header ──
+  const hd=document.createElement('div');
+  hd.innerHTML=`<div class="stats-total">${th?th+'h':''}${tm?` ${tm}m`:''||'0h'}</div>
+    <div class="stats-sub">SCHEDULED THIS WEEK &nbsp;·&nbsp; <span style="color:${goalPct>=100?'#E85D4A':goalPct>=80?'#F2A028':'var(--acc)'}">${goalPct}%</span> OF ${dayGoalHours*7}h WEEKLY GOAL</div>`;
+  c.appendChild(hd);
+
+  // ── BY CATEGORY bars ──
+  const catSec=document.createElement('div');catSec.style.marginBottom='18px';
+  catSec.innerHTML=`<div class="stats-sec-h" style="margin-bottom:12px">BY CATEGORY</div>`;
+  const maxCat=Math.max(...Object.values(catMins),1);
+  CATS.forEach(ct=>{
+    if(!catMins[ct.id]) return;
+    const row=document.createElement('div');row.className='stat-bar-row';
+    const pct=(catMins[ct.id]/maxCat*100).toFixed(1);
+    row.innerHTML=`<span class="stat-bar-lbl" style="color:${ct.c}">${ct.id}</span><div class="stat-bar-wrap"><div class="stat-bar-fill" style="width:${pct}%;background:${ct.c}"></div></div><span class="stat-bar-val">${fd(catMins[ct.id])}</span>`;
+    catSec.appendChild(row);
+  });
+  c.appendChild(catSec);
+
+  // ── BY DAY ──
+  const daysSec=document.createElement('div');daysSec.style.marginBottom='20px';
+  daysSec.innerHTML=`<div class="stats-sec-h" style="margin-bottom:12px">BY DAY</div>`;
+  const grid=document.createElement('div');grid.className='stats-days';
+  const maxDay=Math.max(...dayMins,1);
+  dayMins.forEach((m,i)=>{
+    const isBest=m===maxDay&&m>0;
+    const h=Math.floor(m/60), rem=Math.round(m%60);
+    // Show "Xh Ym" if both, just "Xh" or "Ym", or "—" if nothing
+    let val, unit;
+    if(!m){val='—';unit='';}
+    else if(h&&rem){val=h+'h';unit=rem+'m';}
+    else if(h){val=h;unit='h';}
+    else{val=rem;unit='m';}
+    grid.innerHTML+=`<div class="sd${isBest?' best':''}"><div class="sd-n">${DAYS[i].slice(0,2)}</div><div class="sd-v">${val}</div><div class="sd-u">${unit}</div></div>`;
+  });
+  daysSec.appendChild(grid);
+  c.appendChild(daysSec);
+
+  // ── DAILY GOAL BUTTON at bottom ──
+  const goalBtn=document.createElement('button');
+  goalBtn.className='btn btn-s';
+  goalBtn.style.cssText='width:100%;margin-bottom:16px;font-size:12px;display:flex;align-items:center;justify-content:center;gap:7px';
+  goalBtn.innerHTML=`⏱ Daily target: <strong>${dayGoalHours}h</strong>`;
+  goalBtn.onclick=openGoalPopup;
+  c.appendChild(goalBtn);
+
+  const hrBtn=document.createElement('button');
+  hrBtn.className='btn btn-s';
+  hrBtn.style.cssText='width:100%;margin-bottom:16px;font-size:12px;display:flex;align-items:center;justify-content:center;gap:7px';
+  hrBtn.innerHTML=`🕐 Calendar hours: <strong>${String(HS).padStart(2,'0')}:00 – ${String(HE).padStart(2,'0')}:00</strong>`;
+  hrBtn.onclick=openHrPopup;
+  c.appendChild(hrBtn);
+
+  // ── RETURN-TO-ORIGINAL-POSITION TOGGLE ──
+  const retDiv=document.createElement('div');
+  retDiv.style.cssText='display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--divc);margin-bottom:16px;gap:12px';
+  const togChecked=returnToOrigPos?'checked':'';
+  const togBg=returnToOrigPos?'var(--acc)':'#ccc';
+  const togLeft=returnToOrigPos?'18px':'2px';
+  retDiv.innerHTML=`
+    <div style="font-size:12px;color:var(--pt);flex:1">Return tasks to original position<br><span style="font-size:10px;color:var(--pm)">When dragging events back to the task panel</span></div>
+    <label style="position:relative;display:inline-block;width:40px;height:22px;flex-shrink:0;cursor:pointer">
+      <input type="checkbox" id="retPosToggle" ${togChecked} style="opacity:0;width:0;height:0;position:absolute">
+      <span id="retPosBg" style="position:absolute;inset:0;background:${togBg};border-radius:22px;transition:background .2s;pointer-events:none"></span>
+      <span id="retPosKnob" style="position:absolute;left:${togLeft};top:2px;width:18px;height:18px;background:#fff;border-radius:50%;transition:left .2s;pointer-events:none;box-shadow:0 1px 3px rgba(0,0,0,.3)"></span>
+    </label>`;
+  const togEl=retDiv.querySelector('#retPosToggle');
+  togEl.onchange=()=>{
+    returnToOrigPos=togEl.checked;
+    retDiv.querySelector('#retPosBg').style.background=returnToOrigPos?'var(--acc)':'#ccc';
+    retDiv.querySelector('#retPosKnob').style.left=returnToOrigPos?'18px':'2px';
+  };
+  c.appendChild(retDiv);
+
+  // ── CATEGORY MANAGEMENT ──
+  const mgmtSec=document.createElement('div');
+  mgmtSec.innerHTML=`<div class="stats-sec-h" style="margin-bottom:12px">CATEGORIES</div>`;
+
+  CATS.forEach(ct=>{
+    const row=document.createElement('div');
+    row.className='cat-mgmt-row';
+    const usedCount=S.events.filter(ev=>ev.cat===ct.id).length+S.tasks.filter(t=>t.cat===ct.id).length;
+    row.innerHTML=`
+      <div class="cat-mgmt-dot" style="background:${ct.c}"></div>
+      <span class="cat-mgmt-name">${ct.id}</span>
+      <span class="cat-mgmt-used">${usedCount?usedCount+' event'+(usedCount!==1?'s':''):''}</span>
+      <button class="cat-mgmt-btn" onclick="openCatEdit('${ct.id}')" title="Edit">✏️</button>
+      <button class="cat-mgmt-btn cat-del" onclick="deleteCat('${ct.id}')" title="${usedCount?'Reassign events first':'Delete'}" ${usedCount?'disabled':''}>✕</button>`;
+    mgmtSec.appendChild(row);
+  });
+
+  const addCatBtn=document.createElement('button');
+  addCatBtn.className='btn btn-s';addCatBtn.style.cssText='width:100%;margin-top:10px;font-size:12px';
+  addCatBtn.textContent='+ New category';
+  addCatBtn.onclick=()=>openCatEdit(null);
+  mgmtSec.appendChild(addCatBtn);
+  c.appendChild(mgmtSec);
+
+  // ── FOOTER ──
+  const footer=document.createElement('div');
+  footer.style.cssText='margin-top:28px;padding-top:16px;border-top:1px solid var(--divc);text-align:center';
+  footer.innerHTML=`
+    <div style="font-family:'Instrument Serif',serif;font-size:16px;color:var(--pt);margin-bottom:4px">Chronos</div>
+    <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--pm);letter-spacing:.5px;margin-bottom:2px">Developed by Aleksei Avgustin · 2026</div>
+    <a href="mailto:Alekseiavgustin25@gmail.com" style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--acc);text-decoration:none;letter-spacing:.3px">Alekseiavgustin25@gmail.com</a>
+    <div style="font-size:9px;color:var(--pm);margin-top:8px;line-height:1.5;opacity:.7">Built with the assistance of Claude AI<br>by Anthropic</div>`;
+  c.appendChild(footer);
+}
+
+function openCatEdit(catId){
+  editingCatId=catId;
+  const cat=catId?CATS.find(x=>x.id===catId):null;
+  document.getElementById('catEditTitle').textContent=cat?'Edit Category':'New Category';
+  document.getElementById('catEditName').value=cat?cat.id:'';
+  // Render color swatches
+  const sw=document.getElementById('catEditColors');sw.innerHTML='';
+  _catPickedColor=cat?cat.c:PRESET_COLORS[0];
+  PRESET_COLORS.forEach(col=>{
+    const el=document.createElement('div');el.className='cat-color-sw'+(col===_catPickedColor?' sel':'');
+    el.style.background=col;el.dataset.col=col;
+    el.onclick=()=>{
+      _catPickedColor=col;
+      document.getElementById('catEditHex').value=col;
+      document.getElementById('catEditHex').style.borderColor=col;
+      sw.querySelectorAll('.cat-color-sw').forEach(s=>s.classList.remove('sel'));el.classList.add('sel');
+    };
+    sw.appendChild(el);
+  });
+  // Custom hex input — syncs with _catPickedColor
+  const hexIn=document.getElementById('catEditHex');
+  hexIn.value=cat?cat.c:'';
+  hexIn.oninput=()=>{
+    const v=hexIn.value.trim();
+    if(/^#[0-9a-fA-F]{6}$/.test(v)){
+      _catPickedColor=v;hexIn.style.borderColor=v;
+      sw.querySelectorAll('.cat-color-sw').forEach(s=>s.classList.remove('sel'));
+    }
+  };
+  openM('modCatEdit');
+  setTimeout(()=>document.getElementById('catEditName').focus(),120);
+}
+
+function saveCatEdit(){
+  const name=document.getElementById('catEditName').value.trim();
+  if(!name){toast('Category needs a name','err');return;}
+  if(!editingCatId&&CATS.find(x=>x.id===name)){toast('Category already exists','err');return;}
+  const hexNow=document.getElementById('catEditHex').value.trim();
+  const color=/^#[0-9a-fA-F]{6}$/.test(hexNow)?hexNow:_catPickedColor||PRESET_COLORS[0];
+  snap();
+  if(editingCatId){
+    const cat=CATS.find(x=>x.id===editingCatId);
+    if(cat){
+      // Rename in all events and tasks if name changed
+      if(cat.id!==name){
+        S.events.forEach(ev=>{if(ev.cat===cat.id) ev.cat=name;});
+        S.tasks.forEach(t=>{if(t.cat===cat.id) t.cat=name;});
+      }
+      cat.id=name;cat.c=color;
+    }
+  } else {
+    CATS.push({id:name,c:color});
+  }
+  // If we renamed the currently-selected category, follow the rename
+  if(editingCatId&&editingCatId!==name){
+    if(selCat===editingCatId) selCat=name;
+    if(qcSelCat===editingCatId) qcSelCat=name;
+  }
+  closeM('modCatEdit');rStats();rCatSw(selCat);rQcCatSw(qcSelCat);rTasks();rEvents();rOutline();rHead();
+  toast(editingCatId?'Category updated':'Category created','ok');
+}
+
+function deleteCat(catId){
+  const used=S.events.filter(ev=>ev.cat===catId).length+S.tasks.filter(t=>t.cat===catId).length;
+  if(used){toast('Reassign or delete all events/tasks in this category first','err');return;}
+  snap();
+  CATS.splice(CATS.findIndex(x=>x.id===catId),1);
+  rStats();rCatSw(selCat);rQcCatSw(qcSelCat);
+  toast('Category deleted','warn');
+}
+
+function rNowLine(){
+  document.querySelectorAll('.nwl').forEach(el=>el.remove());
+  const now=new Date(),tm=now.getHours()*60+now.getMinutes();
+  if(tm<HS*60||tm>=HE*60) return;
+  const day=now.getDay(),di=day===0?6:day-1;
+  if(now<S.ws||now>addD(S.ws,6)) return;
+  const col=document.querySelector(`.dcol[data-day="${di}"]`);if(!col) return;
+  const el=document.createElement('div');el.className='nwl';
+  el.style.top=(tm-HS*60)*(HPX/60)+'px';col.appendChild(el);
+}
+
+// ── DROP POSITION ──────────────────────────────────────────────────────────
+function getDropPos(cx,cy,offsetY){
+  const cc2=document.getElementById('dcols');
+  const cr=cc2.getBoundingClientRect();
+  const x=cx-cr.left;
+  const y=(cy-offsetY)-cr.top;
+  const cw=cc2.offsetWidth/7;
+  const di=Math.floor(x/cw);
+  if(di<0||di>6) return null;
+  const totalMin=sn(y/(HPX/60)+HS*60);
+  const dur=drag?.dur||60;
+  return{di,startMin:Math.max(HS*60,Math.min(HE*60-dur,totalMin))};
+}
+function onCal(cx,cy){const r=document.getElementById('calp').getBoundingClientRect();return cx>=r.left&&cx<=r.right&&cy>=r.top&&cy<=r.bottom;}
+function onRight(cx){return cx>=document.getElementById('taskp').getBoundingClientRect().left;}
+
+// ── GHOST ──────────────────────────────────────────────────────────────────
+function showGhost(name,dur,color,cx,cy){
+  const g=document.getElementById('ghost');
+  g.style.display='block';g.style.borderLeftColor=color;
+  g.style.left=cx+14+'px';g.style.top=cy-20+'px';
+  document.getElementById('gn').textContent=name;
+  document.getElementById('gd').textContent=fd(dur);
+}
+
+// ── MOUSE EVENTS ───────────────────────────────────────────────────────────
+document.addEventListener('mousemove',e=>{
+  if(resize){
+    const dy=e.clientY-resize.startY;
+    const deltaSn=sn(dy/(HPX/60));
+    const newDur=Math.max(15,resize.origDur+deltaSn);
+    const ev=S.events.find(x=>x.id===resize.eid);
+    if(ev){
+      const sm=startOf(ev,resize.di);
+      const ok=!hasConflict(resize.di,sm,newDur,ev.id);
+      resize.block.style.outline=ok?'':'2px solid #E85D4A';
+      if(ok){
+        ev.dur=newDur;
+        resize.block.style.height=Math.max(newDur*(HPX/60),22)+'px';
+        const te=resize.block.querySelector('.eb-time');
+        if(te) te.textContent=`${ft(sm)}–${ft(sm+ev.dur)}`;
+      }
+    }
+    return;
+  }
+  if(pDrag&&!drag){
+    const dx=Math.abs(e.clientX-pDrag.startX),dy2=Math.abs(e.clientY-pDrag.startY);
+    if(dx>THRESH||dy2>THRESH){
+      drag=pDrag;pDrag=null;
+      if(drag.type==='event'){
+        drag.block.classList.add('dragging');
+        document.getElementById('trz').style.display='none'; // will show on hover via mousemove
+      }
+    } else return;
+  }
+  if(!drag) return;
+  showGhost(drag.name,drag.dur,drag.color,e.clientX,e.clientY);
+  if(drag.type==='event'){
+    const over=onRight(e.clientX);
+    document.getElementById('trz').style.display=over?'flex':'none';
+    if(over){
+      const trzRect=document.getElementById('trz').getBoundingClientRect();
+      const splitY=trzRect.top+trzRect.height*0.70;
+      const inTop=e.clientY<splitY;
+      document.getElementById('trz-top').classList.toggle('hot',inTop);
+      document.getElementById('trz-bot').classList.toggle('hot',!inTop);
+      document.querySelectorAll('.dp').forEach(p=>{p.style.display='none';p.classList.remove('no');});return;
+    } else {
+      document.getElementById('trz-top').classList.remove('hot');
+      document.getElementById('trz-bot').classList.remove('hot');
+    }
+  }
+  document.querySelectorAll('.dp').forEach(p=>{p.style.display='none';p.classList.remove('no');});
+  if(onCal(e.clientX,e.clientY)){
+    const pos=getDropPos(e.clientX,e.clientY,drag.offsetY||0);
+    if(pos){
+      const excl=drag.type==='event'?drag.eid:null;
+      const bad=hasConflict(pos.di,pos.startMin,drag.dur,excl);
+      const dp=document.getElementById('dp-'+pos.di);
+      if(dp){
+        dp.style.display='block';
+        dp.style.top=(pos.startMin-HS*60)*(HPX/60)+'px';
+        dp.style.height=Math.max(drag.dur*(HPX/60),22)+'px';
+        if(bad) dp.classList.add('no');
+        const tip=dp.querySelector('.dp-tip');
+        if(tip) tip.textContent=ft(pos.startMin);
+      }
+    }
+  }
+});
+
+document.addEventListener('mouseup',e=>{
+  if(resize){
+    if(resize.block) resize.block.style.outline='';
+    snap();rEvents();rOutline();rHead();rWLabel();resize=null;return;
+  }
+  if(pDrag){pDrag=null;return;}
+  if(!drag) return;
+  document.getElementById('ghost').style.display='none';
+  document.querySelectorAll('.dp').forEach(p=>{p.style.display='none';p.classList.remove('no');});
+  const trz=document.getElementById('trz');trz.style.display='none';
+  document.getElementById('trz-top').classList.remove('hot');
+  document.getElementById('trz-bot').classList.remove('hot');
+  const cx=e.clientX,cy=e.clientY;
+
+  if(drag.type==='event'){
+    if(drag.block) drag.block.classList.remove('dragging');
+    if(onRight(cx)){
+      const ev=S.events.find(x=>x.id===drag.eid);
+      if(ev){
+        // Determine which zone based on Y position (top 70% = return, bottom 30% = delete)
+        const trzRect=document.getElementById('taskp').getBoundingClientRect();
+        const splitY=trzRect.top+trzRect.height*0.70;
+        const inTop=cy<splitY;
+        if(inTop){
+          // Return to task list — convert event back to task
+          snap();
+          const restoredTask={id:S.nid++,name:ev.name,dur:ev.dur,cat:ev.cat,notes:ev.notes||'',
+            rec:ev.recurring||'',recDays:ev.recDays?[...ev.recDays]:null,part:null,_origTid:ev.tid};
+          if(returnToOrigPos && ev.tid!=null){
+            // Find original position by source task id
+            const origIdx=S.tasks.findIndex(t=>t.id===ev.tid);
+            if(origIdx>=0) S.tasks.splice(origIdx,0,restoredTask);
+            else S.tasks.push(restoredTask);
+          } else {
+            S.tasks.push(restoredTask);
+          }
+          S.events=S.events.filter(x=>x.id!==ev.id);
+          rTasks();rEvents();rOutline();rHead();rWLabel();toast(`"${ev.name}" returned to tasks`,'ok');
+        } else {
+          // Delete
+          if(ev.recurring) askDel(ev.id);
+          else{snap();S.events=S.events.filter(x=>x.id!==ev.id);rEvents();rOutline();rHead();rWLabel();toast('Event removed','warn');}
+        }
+      }
+    } else if(onCal(cx,cy)){
+      const pos=getDropPos(cx,cy,drag.offsetY||0);
+      if(pos&&!hasConflict(pos.di,pos.startMin,drag.dur,drag.eid)){
+        snap();
+        const ev=S.events.find(x=>x.id===drag.eid);
+        if(ev){
+          if(ev.recurring){
+            if(!ev.recPos) ev.recPos={};
+            if(drag.di===pos.di){
+              ev.recPos[pos.di]=pos.startMin;
+            } else {
+              if(ev.recDays&&ev.recDays.length){
+                ev.recDays=ev.recDays.filter(d=>d!==drag.di);
+                if(!ev.recDays.includes(pos.di)) ev.recDays.push(pos.di);
+                delete ev.recPos[drag.di];
+              } else {
+                ev.day=pos.di;
+              }
+              ev.recPos[pos.di]=pos.startMin;
+            }
+          } else {
+            ev.day=pos.di;ev.startMin=pos.startMin;
+          }
+        }
+      }
+      rEvents();rOutline();rHead();rWLabel();
+    } else {
+      rEvents();
+    }
+  } else if(drag.type==='task'){
+    if(onCal(cx,cy)){
+      const pos=getDropPos(cx,cy,0);
+      if(pos){
+        const t=S.tasks.find(x=>x.id===drag.tid);
+        if(t){
+          const daysToPlace=(t.rec&&t.recDays&&t.recDays.length)?t.recDays:[pos.di];
+          if(!hasAnyConflict(daysToPlace,pos.startMin,t.dur)){
+            snap();
+            S.events.push({id:S.nid++,tid:t.id,name:t.name,cat:t.cat,dur:t.dur,
+              notes:t.notes||'',day:pos.di,startMin:pos.startMin,
+              locked:false,done:false,recurring:t.rec||'',
+              recDays:t.recDays?[...t.recDays]:null,recPos:{},bwGroup:t.rec==='biweekly'?S.bwView:1});
+            if(!t.rec) S.tasks=S.tasks.filter(x=>x.id!==t.id);
+            rTasks();rEvents();rOutline();rHead();rWLabel();
+            toast(`"${t.name}" added`,'ok');
+          } else {
+            toast('Conflict — another event is already there','err');
+          }
+        }
+      }
+    }
+  }
+  drag=null;
+});
+
+// Safety: clean up on window blur
+window.addEventListener('blur',()=>{
+  if(drag){if(drag.type==='event'&&drag.block)drag.block.classList.remove('dragging');drag=null;pDrag=null;}
+  document.getElementById('ghost').style.display='none';
+  document.getElementById('trz').style.display='none';
+  document.getElementById('trz-top').classList.remove('hot');
+  document.getElementById('trz-bot').classList.remove('hot');
+  document.querySelectorAll('.dp').forEach(p=>{p.style.display='none';p.classList.remove('no');});
+});
+
+function startResize(e,eid,di,block){
+  e.preventDefault();e.stopPropagation();
+  const ev=S.events.find(x=>x.id===eid);if(!ev) return;
+  resize={eid,di,block,startY:e.clientY,origDur:ev.dur};
+}
+
+// ── EVENT TIME EDITING ──────────────────────────────────────────────────────
+let _evEditId=null;
+
+function getEvStartMin(){
+  const h=parseInt(document.getElementById('evStartH').value)||0;
+  const m=parseInt(document.getElementById('evStartM').value)||0;
+  return Math.max(HS*60, Math.min(HE*60-15, h*60+m));
+}
+function getEvDur(){
+  return (parseInt(document.getElementById('tH').value)||0)*60+(parseInt(document.getElementById('tM').value)||0);
+}
+
+// Called when start time fields change — updates end time display
+function syncEvTime(){
+  const sm=getEvStartMin();
+  const dur=getEvDur();
+  const em=sm+dur;
+  document.getElementById('evEndH').value=Math.floor(em/60);
+  document.getElementById('evEndM').value=em%60;
+  updateEvTimeSummary();
+}
+
+// Called when end time fields change — recomputes duration
+function syncEvTimeFromEnd(){
+  const sh=parseInt(document.getElementById('evStartH').value)||0;
+  const smm=parseInt(document.getElementById('evStartM').value)||0;
+  const eh=parseInt(document.getElementById('evEndH').value)||0;
+  const emm=parseInt(document.getElementById('evEndM').value)||0;
+  const startMin=Math.max(HS*60, sh*60+smm);
+  const endMin=Math.max(HS*60+15, eh*60+emm);
+  const dur=Math.max(15, endMin-startMin);
+  document.getElementById('tH').value=Math.floor(dur/60);
+  document.getElementById('tM').value=dur%60;
+  updateEvTimeSummary();
+}
+
+// Called when duration h/m fields change — updates end time display
+function syncDurFromFields(){
+  if(document.getElementById('evTimeFg').style.display==='none') return;
+  syncEvTime();
+}
+
+function updateEvTimeSummary(){
+  const sm=getEvStartMin();
+  const dur=getEvDur();
+  if(!dur) return;
+  const em=sm+dur;
+  const el=document.getElementById('evTimeSummary');
+  if(el) el.textContent=`${ft(sm)} → ${ft(em)}  ·  ${fd(dur)}`;
+}
+
+// ── TASK CRUD ──────────────────────────────────────────────────────────────
+function rCatSw(sel){
+  const c=document.getElementById('catSw');c.innerHTML='';
+  CATS.forEach(ct=>{
+    const el=document.createElement('div');
+    el.className='csw'+(ct.id===sel?' sel':'');
+    el.innerHTML=`<div class="dot" style="background:${ct.c}"></div>${ct.id}`;
+    el.onclick=()=>{selCat=ct.id;document.querySelectorAll('.csw').forEach(s=>s.classList.remove('sel'));el.classList.add('sel');};
+    c.appendChild(el);
+  });
+}
+
+function setRec(btn){
+  selRec=btn.dataset.v;
+  document.querySelectorAll('.rec-tog button').forEach(b=>b.classList.toggle('sel',b===btn));
+  document.getElementById('dowFg').style.display=(selRec==='weekly'||selRec==='biweekly')?'block':'none';
+}
+
+function rDowRow(sel){
+  selDow=[...sel];
+  const c=document.getElementById('dowRow');c.innerHTML='';
+  DAYS.forEach((name,i)=>{
+    const b=document.createElement('button');
+    b.className='dcircle'+(selDow.includes(i)?' sel':'');
+    b.textContent=name.slice(0,2);b.dataset.di=i;
+    b.onclick=e=>{
+      e.preventDefault();
+      b.classList.toggle('sel');
+      selDow=b.classList.contains('sel')
+        ?[...selDow,i].filter((v,j,a)=>a.indexOf(v)===j)
+        :selDow.filter(d=>d!==i);
+    };
+    c.appendChild(b);
+  });
+}
+
+function openAdd(){
+  document.getElementById('modTitle').textContent='New Task';
+  document.getElementById('editId').value='';
+  document.getElementById('tName').value='';
+  document.getElementById('tH').value='1';document.getElementById('tM').value='0';
+  document.getElementById('tNotes').value='';
+  selCat='Work';rCatSw('Work');
+  selRec='';document.querySelectorAll('.rec-tog button').forEach(b=>b.classList.toggle('sel',b.dataset.v===''));
+  document.getElementById('dowFg').style.display='none';
+  document.getElementById('evTimeFg').style.display='none';
+  document.getElementById('durLabel').textContent='Duration';
+  rDowRow([]);
+  _evEditId=null;
+  openM('modTask');setTimeout(()=>document.getElementById('tName').focus(),120);
+}
+
+function openEditTask(tid){
+  const t=S.tasks.find(x=>x.id===tid);if(!t) return;
+  document.getElementById('modTitle').textContent='Edit Task';
+  document.getElementById('editId').value='t:'+tid;
+  document.getElementById('tName').value=t.name;
+  document.getElementById('tH').value=Math.floor(t.dur/60);document.getElementById('tM').value=t.dur%60;
+  document.getElementById('tNotes').value=t.notes||'';
+  selCat=t.cat||'Work';rCatSw(selCat);
+  selRec=t.rec||'';document.querySelectorAll('.rec-tog button').forEach(b=>b.classList.toggle('sel',b.dataset.v===selRec));
+  document.getElementById('dowFg').style.display=(selRec==='weekly'||selRec==='biweekly')?'block':'none';
+  rDowRow(t.recDays||[]);
+  document.getElementById('evTimeFg').style.display='none';
+  document.getElementById('durLabel').textContent='Duration';
+  _evEditId=null;
+  openM('modTask');
+}
+
+function openEditEv(eid){
+  const ev=S.events.find(x=>x.id===eid);if(!ev) return;
+  document.getElementById('modTitle').textContent='Edit Event';
+  document.getElementById('editId').value='ev:'+eid;
+  document.getElementById('tName').value=ev.name;
+  document.getElementById('tH').value=Math.floor(ev.dur/60);document.getElementById('tM').value=ev.dur%60;
+  document.getElementById('tNotes').value=ev.notes||'';
+  selCat=ev.cat||'Work';rCatSw(selCat);
+  selRec=ev.recurring||'';document.querySelectorAll('.rec-tog button').forEach(b=>b.classList.toggle('sel',b.dataset.v===selRec));
+  document.getElementById('dowFg').style.display=(selRec==='weekly'||selRec==='biweekly')?'block':'none';
+  rDowRow(ev.recDays||[]);
+  // Show and populate the time section for events
+  document.getElementById('evTimeFg').style.display='block';
+  document.getElementById('durLabel').textContent='Duration (auto-updates with time)';
+  const sm=ev.startMin;
+  document.getElementById('evStartH').value=Math.floor(sm/60);
+  document.getElementById('evStartM').value=sm%60;
+  const em=sm+ev.dur;
+  document.getElementById('evEndH').value=Math.floor(em/60);
+  document.getElementById('evEndM').value=em%60;
+  _evEditId=eid;
+  updateEvTimeSummary();
+  openM('modTask');
+}
+
+function saveForm(){
+  const eid=document.getElementById('editId').value;
+  const name=document.getElementById('tName').value.trim();if(!name) return;
+  const dur=(parseInt(document.getElementById('tH').value)||0)*60+(parseInt(document.getElementById('tM').value)||0);
+  if(dur<=0) return;
+  const notes=document.getElementById('tNotes').value.trim();
+  const recDays=(selRec==='weekly'||selRec==='biweekly')?[...selDow]:null;
+  snap();
+  if(eid.startsWith('ev:')){
+    const ev=S.events.find(x=>x.id===parseInt(eid.slice(3)));
+    if(ev){
+      ev.name=name;ev.dur=dur;ev.cat=selCat;ev.notes=notes;ev.recurring=selRec;ev.recDays=recDays;
+      // Apply start time if the time section was shown
+      if(document.getElementById('evTimeFg').style.display!=='none'){
+        const sh=parseInt(document.getElementById('evStartH').value)||0;
+        const sm=parseInt(document.getElementById('evStartM').value)||0;
+        const newStart=Math.max(HS*60,Math.min(HE*60-dur, sh*60+sm));
+        // For non-recurring or base time update
+        if(!ev.recurring){
+          ev.startMin=newStart;
+        } else {
+          // Update the recPos for this specific day
+          if(!ev.recPos) ev.recPos={};
+          const di=ev.day;
+          ev.recPos[di]=newStart;
+          ev.startMin=newStart; // also update base
+        }
+      }
+    }
+    closeM('modTask');rEvents();rOutline();rHead();rWLabel();rStats();
+  } else if(eid.startsWith('t:')){
+    const t=S.tasks.find(x=>x.id===parseInt(eid.slice(2)));
+    if(t){t.name=name;t.dur=dur;t.cat=selCat;t.notes=notes;t.rec=selRec;t.recDays=recDays;}
+    closeM('modTask');rTasks();
+  } else {
+    S.tasks.push({id:S.nid++,name,dur,cat:selCat,notes,rec:selRec,recDays,part:null});
+    closeM('modTask');rTasks();toast(`Task "${name}" created`,'ok');
+  }
+}
+
+function delTask(tid){
+  snap();
+  S.tasks=S.tasks.filter(x=>x.id!==tid);
+  rTasks();toast('Task deleted','warn');
+}
+function dupTask(tid){
+  const t=S.tasks.find(x=>x.id===tid);if(!t) return;
+  snap();
+  S.tasks.push({...JSON.parse(JSON.stringify(t)),id:S.nid++,part:null});
+  rTasks();toast(`"${t.name}" duplicated`,'ok');
+}
+
+// ── CUT ────────────────────────────────────────────────────────────────────
+function openCut(tid){
+  const t=S.tasks.find(x=>x.id===tid);if(!t) return;
+  document.getElementById('cutId').value=tid;
+  document.getElementById('cutN').value='2';
+  updCutPrev();openM('modCut');
+}
+function updCutPrev(){
+  const tid=parseInt(document.getElementById('cutId').value);
+  const t=S.tasks.find(x=>x.id===tid);if(!t) return;
+  const n=parseInt(document.getElementById('cutN').value);
+  const base=Math.floor(t.dur/n),rem=t.dur%n;
+  const c=document.getElementById('cutPrev');c.innerHTML='';
+  for(let i=0;i<n;i++){
+    const d=base+(i===n-1?rem:0);
+    const el=document.createElement('div');el.className='cut-p';
+    el.innerHTML=`<div class="cut-pn">${t.name}</div><div class="cut-pd">${fd(d)}</div><div class="cut-pi">${i+1}/${n}</div>`;
+    c.appendChild(el);
+  }
+}
+function doCut(){
+  const tid=parseInt(document.getElementById('cutId').value);
+  const t=S.tasks.find(x=>x.id===tid);if(!t) return;
+  const n=parseInt(document.getElementById('cutN').value);
+  const base=Math.floor(t.dur/n),rem=t.dur%n;
+  snap();
+  const parts=[];
+  for(let i=0;i<n;i++){
+    const d=base+(i===n-1?rem:0);
+    parts.push({id:S.nid++,name:t.name,dur:d,cat:t.cat,notes:t.notes||'',
+      rec:t.rec,recDays:t.recDays?[...t.recDays]:null,part:`${i+1}/${n}`});
+  }
+  S.tasks=S.tasks.filter(x=>x.id!==tid);
+  S.tasks.push(...parts);
+  closeM('modCut');rTasks();toast(`Cut into ${n} parts`,'ok');
+}
+
+// ── CONTEXT MENU ───────────────────────────────────────────────────────────
+function showMenu(e,eid){
+  e.preventDefault();menuEid=eid;
+  const ev=S.events.find(x=>x.id===eid);
+  document.getElementById('lkic').textContent=ev?.locked?'🔓':'🔒';
+  document.getElementById('lktx').textContent=ev?.locked?' Unlock':' Lock';
+  document.getElementById('doneic').textContent=ev?.done?'○':'✓';
+  document.getElementById('donetx').textContent=ev?.done?' Mark undone':' Mark done';
+  const m=document.getElementById('evmenu');m.style.display='block';
+  m.style.left=Math.min(e.clientX,window.innerWidth-185)+'px';
+  m.style.top=Math.min(e.clientY,window.innerHeight-165)+'px';
+}
+function mAct(a){
+  const ev=S.events.find(x=>x.id===menuEid);if(!ev) return;
+  if(a==='lock'){snap();ev.locked=!ev.locked;rEvents();toast(ev.locked?'Event locked':'Event unlocked');}
+  else if(a==='done'){snap();ev.done=!ev.done;rEvents();rOutline();rStats();toast(ev.done?'Marked done ✓':'Marked undone');}
+  else if(a==='edit') openEditEv(ev.id);
+  else if(a==='dup') dupEvent(ev.id);
+  else if(a==='del') askDel(ev.id);
+  closeMenu();
+}
+function closeMenu(){document.getElementById('evmenu').style.display='none';menuEid=null;}
+document.addEventListener('click',e=>{if(!e.target.closest('#evmenu')&&!e.target.closest('.eb')) closeMenu();});
+
+function dupEvent(eid){
+  const ev=S.events.find(x=>x.id===eid);if(!ev) return;
+  const newEv=JSON.parse(JSON.stringify(ev));
+  newEv.id=S.nid++;newEv.locked=false;newEv.done=false;newEv.recPos={};
+  // Try to place at startMin+60, -60, +30, -30 on the same base day
+  const baseSm=ev.startMin;
+  const candidates=[baseSm+60,baseSm-60,baseSm+90,baseSm-90,baseSm+30,baseSm-30];
+  const checkDay=ev.day;
+  let placed=false;
+  for(const sm of candidates){
+    if(sm<HS*60||sm+ev.dur>HE*60) continue;
+    if(!hasConflict(checkDay,sm,ev.dur,null)){
+      newEv.startMin=sm;newEv.day=checkDay;
+      placed=true;break;
+    }
+  }
+  if(!placed){toast('No room to duplicate — calendar is full on that day','warn');return;}
+  snap();
+  S.events.push(newEv);
+  rEvents();rOutline();rHead();rWLabel();toast(`"${ev.name}" duplicated`,'ok');
+}
+
+// ── DELETE RECURRING ───────────────────────────────────────────────────────
+function askDel(eid){
+  const ev=S.events.find(x=>x.id===eid);if(!ev) return;
+  if(ev.recurring){
+    document.getElementById('delRecEid').value=eid;
+    document.getElementById('delRecMsg').textContent=
+      `"${ev.name}" repeats ${ev.recurring==='biweekly'?'every 2 weeks':'every week'}. What would you like to remove?`;
+    openM('modDelRec');
+  } else {
+    snap();S.events=S.events.filter(x=>x.id!==eid);rEvents();rOutline();rHead();rWLabel();toast('Event removed','warn');
+  }
+}
+function delRecThis(){
+  snap();S.events=S.events.filter(x=>x.id!==parseInt(document.getElementById('delRecEid').value));
+  closeM('modDelRec');rEvents();rOutline();rHead();rWLabel();toast('Occurrence removed','warn');
+}
+function delRecAll(){
+  const eid=parseInt(document.getElementById('delRecEid').value);
+  const ev=S.events.find(x=>x.id===eid);if(!ev) return;
+  snap();
+  if(ev.tid!=null) S.events=S.events.filter(x=>x.tid!==ev.tid);
+  else S.events=S.events.filter(x=>x.id!==eid);
+  closeM('modDelRec');rEvents();rOutline();rHead();rWLabel();toast('All occurrences removed','warn');
+}
+
+// ── APPLE CALENDAR EXPORT ─────────────────────────────────────────────────
+function exportICS(){
+  const d=S.ws;
+  const fmt=x=>`${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}`;
+  document.getElementById('icsStart').value=fmt(d);
+  document.getElementById('icsEnd').value=fmt(addD(d,28));  // 4 weeks default
+  document.getElementById('icsCalName').value=document.getElementById('projName').value||'My Schedule';
+  openM('modICS');
+}
+
+function icsSetRange(weeks){
+  const start=new Date(document.getElementById('icsStart').value+'T00:00:00');
+  if(isNaN(start.getTime())) return;
+  const fmt=x=>`${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}`;
+  document.getElementById('icsEnd').value=fmt(addD(start,weeks*7));
+}
+
+function doExportICS(){
+  const w1start=new Date(document.getElementById('icsStart').value+'T00:00:00');
+  const w1end=new Date(document.getElementById('icsEnd').value+'T00:00:00');
+  if(isNaN(w1start.getTime())||isNaN(w1end.getTime())){toast('Invalid date range','err');return;}
+  if(w1end<=w1start){toast('End date must be after start date','err');return;}
+  const weeks=Math.ceil((w1end-w1start)/(7*24*60*60*1000));
+  const calName=document.getElementById('icsCalName').value||document.getElementById('projName').value||'Schedule';
+  const esc=s=>String(s).replace(/\\/g,'\\\\').replace(/;/g,'\\;').replace(/,/g,'\\,').replace(/\n/g,'\\n');
+  const fmt=(d,m)=>{const h=Math.floor(m/60),mm=m%60;return `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}T${String(h).padStart(2,'0')}${String(mm).padStart(2,'0')}00`;};
+  const lines=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Chronos Scheduler//EN','CALSCALE:GREGORIAN','METHOD:PUBLISH',
+    'X-WR-CALNAME:'+esc(calName)];
+  const uid=()=>`${Date.now()}-${Math.random().toString(36).slice(2)}@chronos`;
+
+  S.events.forEach(ev=>{
+    const daysOfEv=(ev.recDays&&ev.recDays.length)?ev.recDays:[ev.day];
+    if(!ev.recurring){
+      // One-time event: place on current week
+      daysOfEv.forEach(di=>{
+        const d=addD(S.ws,di);
+        const sm=startOf(ev,di);
+        lines.push('BEGIN:VEVENT',`UID:${uid()}`,`SUMMARY:${esc(ev.name)}`,
+          `DTSTART:${fmt(d,sm)}`,`DTEND:${fmt(d,sm+ev.dur)}`,`CATEGORIES:${esc(ev.cat)}`);
+        if(ev.notes) lines.push(`DESCRIPTION:${esc(ev.notes)}`);
+        if(ev.done) lines.push('STATUS:COMPLETED');
+        lines.push('END:VEVENT');
+      });
+    } else {
+      // Recurring: emit one VEVENT per day per week occurrence
+      for(let wk=0;wk<weeks;wk++){
+        const wkStart=addD(w1start,wk*7);
+        // For biweekly: only emit on matching group weeks (odd wk = W1, even wk = W2 based on user setting)
+        if(ev.recurring==='biweekly'){
+          // wk 0,2,4... = bwGroup 1; wk 1,3,5... = bwGroup 2
+          const wkGroup=(wk%2===0)?1:2;
+          if(wkGroup!==(ev.bwGroup||1)) continue;
+        }
+        daysOfEv.forEach(di=>{
+          const d=addD(wkStart,di);
+          const sm=startOf(ev,di);
+          lines.push('BEGIN:VEVENT',`UID:${uid()}`,`SUMMARY:${esc(ev.name)}`,
+            `DTSTART:${fmt(d,sm)}`,`DTEND:${fmt(d,sm+ev.dur)}`,`CATEGORIES:${esc(ev.cat)}`);
+          if(ev.notes) lines.push(`DESCRIPTION:${esc(ev.notes)}`);
+          if(ev.done) lines.push('STATUS:COMPLETED');
+          lines.push('END:VEVENT');
+        });
+      }
+    }
+  });
+  lines.push('END:VCALENDAR');
+  const blob=new Blob([lines.join('\r\n')],{type:'text/calendar;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;
+  a.download=(calName||document.getElementById('projName').value||'schedule').toLowerCase().replace(/\s+/g,'-')+'.ics';
+  document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
+  closeM('modICS');toast('Calendar exported — open the .ics file to import','ok');
+}
+
+// ── HOUR RANGE ────────────────────────────────────────────────────────────────
+function openHrPopup(){
+  const hs=document.getElementById('hrStart');
+  const he=document.getElementById('hrEnd');
+  hs.innerHTML='';he.innerHTML='';
+  for(let i=0;i<24;i++){
+    hs.innerHTML+=`<option value="${i}" ${i===HS?'selected':''}>${String(i).padStart(2,'0')}:00</option>`;
+    he.innerHTML+=`<option value="${i+1}" ${i+1===HE?'selected':''}>${String(i+1).padStart(2,'0')}:00</option>`;
+  }
+  updateHrPreview();
+  hs.onchange=he.onchange=updateHrPreview;
+  openM('modHr');
+}
+function updateHrPreview(){
+  const s=parseInt(document.getElementById('hrStart').value);
+  const e=parseInt(document.getElementById('hrEnd').value);
+  const span=e-s;
+  document.getElementById('hrPreview').textContent=
+    `${String(s).padStart(2,'0')}:00 → ${String(e).padStart(2,'0')}:00  ·  ${span} hour${span!==1?'s':''} visible`;
+}
+function saveHrRange(){
+  const newHs=parseInt(document.getElementById('hrStart').value);
+  const newHe=parseInt(document.getElementById('hrEnd').value);
+  if(newHe<=newHs){toast('End must be after start','err');return;}
+  if(newHe-newHs<2){toast('Need at least 2 hours','err');return;}
+  snap();HS=newHs;HE=newHe;
+  closeM('modHr');render();rStats();toast(`Calendar hours: ${String(HS).padStart(2,'0')}:00–${String(HE).padStart(2,'0')}:00`,'ok');
+}
+
+// ── CLEAR TASKS ───────────────────────────────────────────────────────────────
+function confirmClearTasks(){ openM('modClearTasks'); }
+function doClearTasks(){
+  snap();S.tasks=[];closeM('modClearTasks');rTasks();toast('All tasks cleared','warn');
+}
+
+// ── DAILY GOAL POPUP ───────────────────────────────────────────────────────
+function openGoalPopup(){
+  document.getElementById('goalPopSlider').value=dayGoalHours;
+  document.getElementById('goalPopVal').textContent=dayGoalHours+'h';
+  openM('modGoal');
+}
+function saveGoal(){
+  dayGoalHours=parseFloat(document.getElementById('goalPopSlider').value);
+  closeM('modGoal');rHead();rWLabel();rStats();toast(`Daily target set to ${dayGoalHours}h`,'ok');
+}
+
+// ── NAVIGATION ─────────────────────────────────────────────────────────────
+function prevW(){S.ws=addD(S.ws,-7);render();}
+function nextW(){S.ws=addD(S.ws,7);render();}
+function goToday(){S.ws=getMon(new Date());render();}
+document.getElementById('prevW').onclick=prevW;
+document.getElementById('nextW').onclick=nextW;
+document.getElementById('todayBtn').onclick=goToday;
+function setWV(w){S.bwView=w;render();}
+
+// ── DRAGGABLE PANEL DIVIDER ────────────────────────────────────────────────────
+(()=>{
+  const div=document.getElementById('vdiv');
+  const main=document.getElementById('main');
+  const calp=document.getElementById('calp');
+  let dragging=false,startX=0,startW=0;
+  div.addEventListener('mousedown',e=>{
+    dragging=true;startX=e.clientX;startW=calp.offsetWidth;
+    div.classList.add('dragging');
+    document.body.style.cursor='col-resize';
+    document.body.style.userSelect='none';
+  });
+  document.addEventListener('mousemove',e=>{
+    if(!dragging) return;
+    const mainW=main.offsetWidth;
+    const newW=Math.max(300,Math.min(mainW-260,startW+(e.clientX-startX)));
+    const pct=(newW/mainW*100).toFixed(2);
+    calp.style.flex=`0 0 ${pct}%`;
+  });
+  document.addEventListener('mouseup',()=>{
+    if(dragging){dragging=false;div.classList.remove('dragging');document.body.style.cursor='';document.body.style.userSelect='';}
+  });
+  // Double-click resets to default 62%
+  div.addEventListener('dblclick',()=>{calp.style.flex='0 0 62%';});
+})();
+
+// ── KEYBOARD SHORTCUTS ─────────────────────────────────────────────────────
+// ── SINGLE KEYBOARD HANDLER ─────────────────────────────────────────────────
+document.addEventListener('keydown', e=>{
+  const inInput = document.activeElement.tagName==='INPUT'
+                || document.activeElement.tagName==='TEXTAREA'
+                || document.activeElement.isContentEditable;
+  const modalOpen = !!document.querySelector('.ov.vis');
+
+  // Enter in task/event modal: submit (except in notes textarea)
+  if(e.key==='Enter' && document.getElementById('modTask').classList.contains('vis')){
+    const focused = document.activeElement;
+    if(focused.id !== 'tNotes' && focused.tagName !== 'TEXTAREA'){
+      e.preventDefault();
+      saveForm();
+      return;
+    }
+  }
+
+  // Escape: always close modals / menu regardless of focus
+  if(e.key==='Escape'){
+    if(modalOpen){
+      document.querySelectorAll('.ov.vis').forEach(o=>o.classList.remove('vis'));
+    }
+    closeMenu();
+    return;
+  }
+
+  // Ctrl / Cmd shortcuts — NOT when in an input (browser native undo works there)
+  if(e.ctrlKey || e.metaKey){
+    if(inInput) return; // let browser handle native undo/copy in text fields
+    const k = e.key.toLowerCase();
+    if(k==='z'){ e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
+    if(k==='y'){ e.preventDefault(); redo(); return; }
+
+    return; // other ctrl combos: don't intercept
+  }
+
+  // All other shortcuts: skip when modal open or in text field
+  if(modalOpen || inInput) return;
+
+  switch(e.key){
+    case 'ArrowLeft':  prevW(); break;
+    case 'ArrowRight': nextW(); break;
+    case 't': case 'T': goToday(); break;
+    case 'n': case 'N': openAdd(); break;
+    case 'l': case 'L': openBulk(); break;
+    case '1': setWV(1); break;
+    case '2': setWV(2); break;
+    case '?': case '/': openM('modKeys'); break;
+  }
+});
+
+// ── SAVE / LOAD ────────────────────────────────────────────────────────────
+document.getElementById('saveBtn').onclick=()=>{
+  const d={tasks:S.tasks,events:S.events,nid:S.nid,proj:document.getElementById('projName').value,ws:S.ws.toISOString(),cats:CATS,dayGoalHours,calHs:HS,calHe:HE,returnToOrigPos};
+  document.getElementById('codeOut').textContent=btoa(unescape(encodeURIComponent(JSON.stringify(d))));
+  openM('modSave');
+};
+function copyCode(){
+  navigator.clipboard.writeText(document.getElementById('codeOut').textContent).then(()=>{
+    const b=document.getElementById('copyBtn');b.textContent='✓ Copied!';setTimeout(()=>b.textContent='Copy to clipboard',2000);
+  });
+}
+document.getElementById('loadBtn').onclick=()=>{document.getElementById('loadIn').value='';openM('modLoad');};
+function doLoad(){
+  try{
+    const d=JSON.parse(decodeURIComponent(escape(atob(document.getElementById('loadIn').value.trim()))));
+    S.tasks=d.tasks||[];
+    S.events=(d.events||[]).map(ev=>({...ev,bwGroup:ev.bwGroup||1,recPos:ev.recPos||{}}));
+    S.nid=d.nid||1;
+    if(d.ws) S.ws=new Date(d.ws);
+    if(d.proj) document.getElementById('projName').value=d.proj;
+    if(d.cats&&d.cats.length) CATS.splice(0,CATS.length,...d.cats);
+    if(d.dayGoalHours) dayGoalHours=d.dayGoalHours;
+    if(d.calHs!=null) HS=d.calHs;
+    if(d.calHe!=null) HE=d.calHe;
+    if(d.returnToOrigPos!=null) returnToOrigPos=d.returnToOrigPos;
+    hist=[];fut=[];
+    closeM('modLoad');render();toast('Schedule loaded','ok');
+  }catch{toast('Invalid code — check and try again','err');}
+}
+document.getElementById('pdfBtn').onclick=()=>{
+  // Build a standalone print page with the full calendar
+  const title=document.getElementById('projName').value||'Schedule';
+  const wLabel=document.getElementById('wlabel').textContent;
+  // Clone the entire calendar grid
+  const calh=document.getElementById('calh').cloneNode(true);
+  const calgrid=document.getElementById('calgrid').cloneNode(true);
+  // Remove resize handles and other interactive elements from clone
+  calgrid.querySelectorAll('.eb-rsz,.dp,.draw-preview').forEach(el=>el.remove());
+  // Build HTML
+  const html=`<!DOCTYPE html><html><head><meta charset="UTF-8">
+<title>${title}</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@300;400&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'DM Sans',sans-serif;background:#fff;color:#1c1b17;padding:16px}
+h1{font-family:'Instrument Serif',serif;font-size:22px;margin-bottom:4px;color:#1c1b17}
+.sub{font-family:'JetBrains Mono',monospace;font-size:10px;color:#9a9890;margin-bottom:16px;letter-spacing:.3px}
+#calh{display:flex;background:#f8f6f1;border-bottom:1px solid #d4d0c8;border-top:1px solid #d4d0c8}
+.tgut{width:52px;flex-shrink:0}
+.dh{flex:1;padding:8px 6px 6px;text-align:center;border-left:1px solid #d4d0c8}
+.dh-n{font-family:'JetBrains Mono',monospace;font-size:9px;color:#9a9890;text-transform:uppercase;letter-spacing:1px}
+.dh-d{font-family:'Instrument Serif',serif;font-size:18px;color:#3a3930;margin-top:1px}
+.dh-bar{height:3px;border-radius:2px;margin:4px 4px 0;overflow:hidden;background:#d4d0c8}
+.dh-bar-seg{height:100%}
+.dh.today .dh-n,.dh.today .dh-d{color:#e05a2b}
+#calgrid{display:flex}
+#tlabs{width:52px;flex-shrink:0}
+.tl{height:80px;display:flex;align-items:flex-start;justify-content:flex-end;padding:4px 8px 0 0}
+.tl span{font-family:'JetBrains Mono',monospace;font-size:9px;color:#9a9890;letter-spacing:.3px}
+#dcols{flex:1;display:flex}
+.dcol{flex:1;border-left:1px solid #d4d0c8;position:relative;min-width:0}
+.hrow{height:80px;border-bottom:1px solid #d4d0c8}
+.hrow::after{content:'';display:block;height:50%;border-bottom:1px dotted #eceae3}
+.eb{position:absolute;left:3px;right:3px;border-radius:7px;padding:4px 7px;overflow:hidden;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.eb-name{font-size:10px;font-weight:600;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.eb-time{font-family:'JetBrains Mono',monospace;font-size:8px;color:rgba(255,255,255,.65);margin-top:1px}
+.nwl{position:absolute;left:0;right:0;height:2px;background:#e05a2b}
+.nwl::before{content:'';position:absolute;left:-3px;top:-3px;width:8px;height:8px;border-radius:50%;background:#e05a2b}
+.eb-ics,.eb-rsz,.dp,.draw-preview{display:none!important}
+footer{margin-top:12px;font-family:'JetBrains Mono',monospace;font-size:9px;color:#aaa;text-align:right}
+@media print{body{padding:8px}@page{margin:10mm}}
+</style></head><body>
+<h1>${title}</h1>
+<div class="sub">${wLabel}</div>
+${calh.outerHTML}
+${calgrid.outerHTML}
+<footer>Chronos by Aleksei Avgustin · 2026</footer>
+<script>window.onload=()=>window.print()<\/script>
+</body></html>`;
+  const w=window.open('','_blank','width=1100,height=800');
+  if(w){w.document.write(html);w.document.close();}
+  else toast('Pop-up blocked — allow pop-ups and try again','warn');
+};
+document.getElementById('icsBtn').onclick=exportICS;
+
+// ── TABS & MODALS ──────────────────────────────────────────────────────────
+function switchTab(tab,btn){
+  document.querySelectorAll('.ptab').forEach(t=>t.classList.remove('on'));
+  if(btn&&typeof btn==='object') btn.classList.add('on');
+  else{
+    // Find the tab button that matches by text content
+    const all=document.querySelectorAll('.ptab');
+    const map={'tasks':0,'outline':1,'stats':2};
+    if(map[tab]!=null) all[map[tab]]?.classList.add('on');
+    else all[0]?.classList.add('on');
+  }
+  document.getElementById('tabtasks').style.display=tab==='tasks'?'flex':'none';
+  document.getElementById('tabout').style.display=tab==='outline'?'block':'none';
+  document.getElementById('tabstats').style.display=tab==='stats'?'block':'none';
+  if(tab==='outline') rOutline();
+  if(tab==='stats') rStats();
+}
+function openM(id){document.getElementById(id).classList.add('vis');}
+function closeM(id){document.getElementById(id).classList.remove('vis');}
+document.querySelectorAll('.ov').forEach(o=>{
+  o.addEventListener('click',e=>{if(e.target===o) o.classList.remove('vis');});
+});
+
+// ── INIT ───────────────────────────────────────────────────────────────────
+rCatSw('Work');
+document.querySelector('.rec-tog button[data-v=""]').classList.add('sel');
+render();
+// Scroll to current time
+const _n=new Date();
+document.getElementById('calb').scrollTop=Math.max(0,(_n.getHours()*60+_n.getMinutes()-HS*60)*(HPX/60)-140);
+setInterval(rNowLine,60000);
+
+// No sample data — start fresh
+
+// ── NEW / RESET ────────────────────────────────────────────────────────────
+function confirmNew(){ openM('modNew'); }
+function doNew(){
+  snap();
+  S.tasks=[];S.events=[];S.nid=1;
+  CATS.splice(0,CATS.length,...DEFAULT_CATS.map(x=>({...x})));
+  dayGoalHours=8;
+  HS=6;HE=24;returnToOrigPos=false;
+  document.getElementById('projName').value='MY SCHEDULE';
+  S.ws=getMon(new Date());
+  closeM('modNew');render();toast('Fresh schedule started','ok');
+}
+
+// ── DRAW-TO-CREATE ON CALENDAR ─────────────────────────────────────────────
+// State for the draw gesture
+let drawState=null; // {di, startMin, col, preview}
+let qcSelCat='Work';
+
+function calPosFromEvent(e){
+  const cc2=document.getElementById('dcols');
+  const cr=cc2.getBoundingClientRect();
+  const x=e.clientX-cr.left, y=e.clientY-cr.top;
+  const cw=cc2.offsetWidth/7;
+  const di=Math.floor(x/cw);
+  if(di<0||di>6) return null;
+  const totalMin=sn(y/(HPX/60)+HS*60);
+  return{di, min:Math.max(HS*60,Math.min(HE*60-15,totalMin))};
+}
+
+// Mousedown on a day column (only when not on an event block or resize handle)
+document.getElementById('dcols').addEventListener('mousedown',e=>{
+  // Ignore if: right click, clicking on an event block, or something else is going on
+  if(e.button!==0) return;
+  if(e.target.closest('.eb')) return;
+  if(drag||pDrag||resize) return;
+  const pos=calPosFromEvent(e);
+  if(!pos) return;
+  e.preventDefault();
+  const col=document.querySelector(`.dcol[data-day="${pos.di}"]`);
+  if(!col) return;
+  // Create the preview stripe
+  const preview=document.createElement('div');
+  preview.className='draw-preview';
+  preview.innerHTML='<div class="dp-lbl"></div>';
+  col.appendChild(preview);
+  drawState={di:pos.di, startMin:pos.min, curMin:pos.min, hasDragged:false, col, preview};
+  updateDrawPreview();
+});
+
+function updateDrawPreview(){
+  if(!drawState) return;
+  const{startMin,curMin,preview,hasDragged}=drawState;
+  if(!hasDragged){preview.style.display='none';return;}
+  const lo=Math.min(startMin,curMin), hi=Math.max(startMin,curMin);
+  const clampedLo=Math.max(HS*60,lo);
+  const clampedHi=Math.min(HE*60,hi);
+  const dur=Math.max(15,clampedHi-clampedLo);
+  preview.style.display='block';
+  preview.style.top=(clampedLo-HS*60)*(HPX/60)+'px';
+  preview.style.height=Math.max(dur*(HPX/60),22)+'px';
+  preview.querySelector('.dp-lbl').textContent=
+    ft(clampedLo)+'–'+ft(clampedLo+dur)+' ('+fd(dur)+')';
+  // Red tint if conflicts
+  const bad=hasConflict(drawState.di,clampedLo,dur);
+  preview.style.borderColor=bad?'#E85D4A':'var(--acc)';
+  preview.style.background=bad?'rgba(232,93,74,.18)':'var(--accg)';
+  drawState._lo=clampedLo;drawState._dur=dur;drawState._bad=bad;
+}
+
+document.addEventListener('mousemove',e=>{
+  // Draw state update (runs before drag checks) — skip if a task drag is in progress
+  if(drawState&&!drag&&!pDrag){
+    const pos=calPosFromEvent(e);
+    if(pos&&pos.di===drawState.di){
+      const rawEnd=Math.max(drawState.startMin+15, pos.min+15);
+      drawState.curMin=Math.min(HE*60,rawEnd);
+      // Only consider it a real drag if moved more than 1 snap unit down
+      if(drawState.curMin>drawState.startMin+14) drawState.hasDragged=true;
+    }
+    updateDrawPreview();
+  }
+},true); // capture phase so it runs before the existing mousemove
+
+document.addEventListener('mouseup',e=>{
+  if(!drawState) return;
+  if(e.button!==0){drawState.preview.remove();drawState=null;return;}
+  const lo=drawState._lo||0, dur=drawState._dur||0, di=drawState.di, bad=drawState._bad;
+  const hadDrag=drawState.hasDragged;
+  drawState.preview.remove();
+  drawState=null;
+  // Guard: must be a real drag (>=30min selected) with no conflict
+  if(!hadDrag || dur<30 || bad) return;
+  openQuickCreate(di,lo,dur);
+},true);
+
+function rQcCatSw(sel){
+  const c=document.getElementById('qcCatSw');c.innerHTML='';
+  CATS.forEach(ct=>{
+    const el=document.createElement('div');
+    el.className='csw'+(ct.id===sel?' sel':'');
+    el.innerHTML=`<div class="dot" style="background:${ct.c}"></div>${ct.id}`;
+    el.onclick=()=>{qcSelCat=ct.id;document.querySelectorAll('#qcCatSw .csw').forEach(s=>s.classList.remove('sel'));el.classList.add('sel');};
+    c.appendChild(el);
+  });
+}
+
+function openQuickCreate(di,startMin,dur){
+  document.getElementById('qcDay').value=di;
+  document.getElementById('qcStart').value=startMin;
+  document.getElementById('qcDur').value=dur;
+  document.getElementById('qcName').value='';
+  document.getElementById('qcTitle').textContent=DAYS[di]+', '+ft(startMin)+'–'+ft(startMin+dur);
+  document.getElementById('qcTimeLabel').textContent=
+    DAYS[di]+' · '+ft(startMin)+' – '+ft(startMin+dur)+' · '+fd(dur);
+  qcSelCat='Work';rQcCatSw('Work');
+  openM('modQuick');
+  setTimeout(()=>document.getElementById('qcName').focus(),120);
+}
+
+function saveQuick(){
+  const name=document.getElementById('qcName').value.trim();
+  if(!name) return;
+  const di=parseInt(document.getElementById('qcDay').value);
+  const startMin=parseInt(document.getElementById('qcStart').value);
+  const dur=parseInt(document.getElementById('qcDur').value);
+  if(hasConflict(di,startMin,dur)){toast('Conflict with another event','err');return;}
+  snap();
+  S.events.push({id:S.nid++,tid:null,name,cat:qcSelCat||'Other',dur,notes:'',
+    day:di,startMin,locked:false,done:false,recurring:'',recDays:null,recPos:{},bwGroup:S.bwView});
+  closeM('modQuick');rEvents();rOutline();rHead();rWLabel();
+  toast(`"${name}" added`,'ok');
+}
+
+
+// ── BULK IMPORT ────────────────────────────────────────────────────────────
+let _bulkParsed=[]; // holds last successful parse
+
+function openBulk(){
+  document.getElementById('bulkInput').value='';
+  document.getElementById('bulkPreview').style.display='none';
+  document.getElementById('bulkErrors').style.display='none';
+  document.getElementById('bulkAddBtn').dataset.ready='0';document.getElementById('bulkAddBtn').style.opacity='0.35';
+  const bf=document.getElementById('bulkFmt');
+  bf.classList.remove('open');
+  document.getElementById('bulkFmtArrow').style.transform='';
+  _bulkParsed=[];
+  openM('modBulk');
+  setTimeout(()=>document.getElementById('bulkInput').focus(),120);
+}
+
+const DAY_MAP={mon:0,tue:1,wed:2,thu:3,fri:4,sat:5,sun:6,
+  monday:0,tuesday:1,wednesday:2,thursday:3,friday:4,saturday:5,sunday:6};
+
+function parseDuration(s){
+  s=s.trim().toLowerCase();
+  // "1h 30m" or "1h30m" or "2h" or "45m" or "90" (minutes)
+  const full=/^(\d+)h\s*(\d+)m?$/.exec(s);
+  if(full) return parseInt(full[1])*60+parseInt(full[2]);
+  const hOnly=/^(\d+)h$/.exec(s);
+  if(hOnly) return parseInt(hOnly[1])*60;
+  const mOnly=/^(\d+)m$/.exec(s);
+  if(mOnly) return parseInt(mOnly[1]);
+  const mins=parseInt(s);
+  if(!isNaN(mins)&&mins>0) return mins;
+  return null;
+}
+
+function parseBulkLine(raw){
+  // Split by comma but allow "1h 30m" by not splitting inside durations
+  const parts=raw.split(',').map(x=>x.trim()).filter(Boolean);
+  if(!parts.length) return null;
+  const name=parts[0];
+  if(!name) return {err:'Missing name', raw};
+
+  let dur=60, cat='Other', rec='', recDays=null;
+
+  // Scan remaining fields: duration, category, repeat, days
+  let i=1;
+  // Duration — if parts[1] looks like a duration
+  if(i<parts.length){
+    const d=parseDuration(parts[i]);
+    if(d!==null){dur=d;i++;}
+  }
+  // Category — next non-empty field that matches a known cat or looks like a word (not a repeat keyword)
+  if(i<parts.length){
+    const v=parts[i].trim();
+    const lv=v.toLowerCase();
+    if(lv!=='weekly'&&lv!=='biweekly'&&!DAY_MAP.hasOwnProperty(lv)){
+      cat=CATS.find(x=>x.id.toLowerCase()===lv)?.id||'Other';i++;
+    }
+  }
+  // Repeat keyword
+  if(i<parts.length){
+    const v=parts[i].trim().toLowerCase();
+    if(v==='weekly'||v==='biweekly'){rec=v;i++;}
+  }
+  // Day names — consume remaining fields as day names
+  if(rec&&i<parts.length){
+    recDays=[];
+    while(i<parts.length){
+      // Could be "Mon Wed Fri" in one field or separate fields
+      const fld=parts[i].trim();
+      const words=fld.split(/\s+/);
+      words.forEach(w=>{const d=DAY_MAP[w.toLowerCase()];if(d!=null&&!recDays.includes(d))recDays.push(d);});
+      i++;
+    }
+    if(!recDays.length) recDays=null;
+  }
+
+  if(dur<=0) return {err:'Invalid duration', raw};
+  return {name, dur, cat, rec, recDays};
+}
+
+function bulkPreviewParse(){
+  const lines=document.getElementById('bulkInput').value.split('\n').filter(l=>l.trim());
+  if(!lines.length){toast('Nothing to parse','warn');return;}
+  _bulkParsed=lines.map(l=>parseBulkLine(l));
+
+  const errs=_bulkParsed.filter(x=>x&&x.err);
+  const ok=_bulkParsed.filter(x=>x&&!x.err);
+
+  // Show preview
+  const list=document.getElementById('bulkPreviewList');list.innerHTML='';
+  _bulkParsed.forEach(p=>{
+    if(!p) return;
+    const item=document.createElement('div');
+    const color=CATS.find(x=>x.id===p.cat)?.c||'#888';
+    if(p.err){
+      item.className='bulk-prev-item bulk-prev-err';
+      item.innerHTML=`<div class="bulk-prev-dot" style="background:#E85D4A"></div><span class="bulk-prev-name">⚠ ${p.raw||''}</span><span class="bulk-prev-meta">${p.err}</span>`;
+    } else {
+      let recLabel='';
+      if(p.rec==='weekly') recLabel='<span style="background:rgba(74,158,255,.14);color:rgba(100,180,255,.9);padding:1px 6px;border-radius:20px;font-size:9px">weekly</span>';
+      if(p.rec==='biweekly') recLabel='<span style="background:rgba(140,90,220,.16);color:rgba(160,140,255,.9);padding:1px 6px;border-radius:20px;font-size:9px">biweekly</span>';
+      const days=p.recDays?p.recDays.map(d=>DAYS[d].slice(0,2)).join(' '):'';
+      item.className='bulk-prev-item';
+      item.innerHTML=`<div class="bulk-prev-dot" style="background:${color}"></div><span class="bulk-prev-name">${p.name}</span><span class="bulk-prev-meta">${fd(p.dur)} &nbsp; ${p.cat} &nbsp; ${recLabel} ${days}</span>`;
+    }
+    list.appendChild(item);
+  });
+
+  document.getElementById('bulkPreview').style.display='block';
+  document.getElementById('bulkCount').textContent=`— ${ok.length} task${ok.length!==1?'s':''} ready${errs.length?', '+errs.length+' error'+(errs.length>1?'s':''):''}`;
+
+  const errBox=document.getElementById('bulkErrors');
+  if(errs.length){
+    errBox.style.display='block';
+    errBox.textContent=errs.map(e=>`"${e.raw}" → ${e.err}`).join('\n');
+  } else {
+    errBox.style.display='none';
+  }
+
+  const ab=document.getElementById('bulkAddBtn');
+  ab.style.opacity=ok.length?'1':'0.35';
+  ab.style.cursor=ok.length?'pointer':'not-allowed';
+  ab.dataset.ready=ok.length?'1':'0';
+}
+
+function bulkCommit(){
+  const ok=_bulkParsed.filter(x=>x&&!x.err);
+  if(!ok.length||document.getElementById('bulkAddBtn').dataset.ready!=='1'){if(!ok.length) toast('Nothing valid to add','warn');return;}
+  snap();
+  ok.forEach(t=>{
+    S.tasks.push({id:S.nid++,name:t.name,dur:t.dur,cat:t.cat,notes:'',
+      rec:t.rec,recDays:t.recDays,part:null});
+  });
+  closeM('modBulk');rTasks();
+  toast(`Added ${ok.length} task${ok.length!==1?'s':''}`, 'ok');
+}
+
+// Live preview as user types (debounced)
+let _bulkDebounce2=null;
+document.getElementById('bulkInput')?.addEventListener('input',()=>{
+  clearTimeout(_bulkDebounce2);
+  _bulkDebounce2=setTimeout(()=>{
+    if(document.getElementById('bulkInput').value.trim()) bulkPreviewParse();
+  }, 400);
+});
+
+
+// ── AI ASSISTANT ──────────────────────────────────────────────────────────────
+const AI_PROMPT = `You are helping a user plan their week using Chronos, a visual weekly scheduler. Here is how it works and how you can help:
+
+## Chronos Bulk Import Format
+You can generate task lists for the user to import directly. Each line = one task:
+  Name, duration, category, repeat, days
+
+Examples:
+  Morning workout, 45m, Health, weekly, Mon Wed Fri
+  Deep work, 2h, Work
+  Team standup, 30m, Work, biweekly, Mon Wed
+  Read, 1h 30m, Learning, weekly, Mon Tue Wed Thu Fri
+
+Rules:
+- Duration: 45m, 2h, 1h 30m, or 90 (minutes)
+- Category: Work, Personal, Health, Social, Learning, Other (or any custom name)
+- Repeat: weekly or biweekly (every 2 weeks)
+- Days: Mon Tue Wed Thu Fri Sat Sun (space-separated after the repeat keyword)
+- Fields are comma-separated
+- Omit category/repeat/days if not needed
+
+## What the user can do in Chronos:
+- Drag tasks from the right panel onto the calendar grid
+- Draw events directly on the calendar by clicking and dragging down
+- Set events to repeat weekly or biweekly on chosen days
+- Toggle W1/W2 to see different biweekly weeks
+- Drag events back to the task list or delete them
+- Export to Apple Calendar (.ics) or PDF
+
+## How to help:
+1. When the user describes their goals or week, generate a formatted task list they can copy and paste into Chronos bulk import (L button or the list icon).
+2. When the user shares their schedule text, analyse it for overload, missing categories, unrealistic durations, or balance issues.
+3. When asked, suggest a revised task list they can re-import.
+4. Always output importable lists as a plain code block, one task per line, using the format above.`;
+
+function openAI(){
+  document.getElementById('aiPromptText').value = AI_PROMPT;
+  refreshScheduleText();
+  // Show guide tab by default
+  switchAITab('guide', document.querySelector('.ai-tab'));
+  openM('modAI');
+}
+
+function switchAITab(tab, btn){
+  document.querySelectorAll('.ai-tab').forEach(b=>{
+    b.classList.remove('on');
+    b.style.color='var(--pm)';
+    b.style.borderBottomColor='transparent';
+  });
+  btn.classList.add('on');
+  btn.style.color='var(--pt)';
+  btn.style.borderBottomColor='var(--pt)';
+  document.getElementById('aiTabGuide').style.display   = tab==='guide'   ? 'flex' : 'none';
+  document.getElementById('aiTabGuide').style.flexDirection = 'column';
+  document.getElementById('aiTabGuide').style.gap = '14px';
+  document.getElementById('aiTabPrompt').style.display   = tab==='prompt'  ? 'block' : 'none';
+  document.getElementById('aiTabSchedule').style.display = tab==='schedule'? 'block' : 'none';
+  if(tab==='schedule') refreshScheduleText();
+}
+
+function copyAIPrompt(){
+  navigator.clipboard.writeText(document.getElementById('aiPromptText').value).then(()=>{
+    toast('AI prompt copied — paste it into Claude or any AI assistant','ok');
+  });
+}
+
+function refreshScheduleText(){
+  const lines = [];
+  lines.push(`CHRONOS SCHEDULE — ${document.getElementById('projName').value||'My Schedule'}`);
+  lines.push(`Week: ${document.getElementById('wlabel').textContent}`);
+  lines.push('');
+  // Events this week
+  const byDay = Array.from({length:7},()=>[]);
+  S.events.forEach(ev=>{
+    showDays(ev).forEach(di=>{if(di>=0&&di<7) byDay[di].push({ev,di});});
+  });
+  let hasAny = false;
+  byDay.forEach((items,i)=>{
+    if(!items.length) return;
+    hasAny = true;
+    items.sort((a,b)=>startOf(a.ev,a.di)-startOf(b.ev,b.di));
+    lines.push(DAYS[i].toUpperCase()+':');
+    items.forEach(({ev,di})=>{
+      const sm=startOf(ev,di);
+      const rec=ev.recurring?` [${ev.recurring}]`:'';
+      lines.push(`  ${ft(sm)}–${ft(sm+ev.dur)}  ${ev.name}  (${ev.cat})${rec}${ev.done?' [DONE]':''}`);
+    });
+    lines.push('');
+  });
+  if(!hasAny) lines.push('(No events scheduled this week)');
+  // Task list
+  if(S.tasks.length){
+    lines.push('UNSCHEDULED TASKS:');
+    S.tasks.forEach(t=>{
+      const rec=t.rec?` [${t.rec}${t.recDays?' on '+t.recDays.map(d=>DAYS[d]).join('/'):''}]`:'';
+      lines.push(`  ${t.name} — ${fd(t.dur)} — ${t.cat}${rec}`);
+    });
+  }
+  const el=document.getElementById('aiScheduleText');
+  if(el) el.value = lines.join('\n');
+}
+
+function copyScheduleText(){
+  refreshScheduleText();
+  navigator.clipboard.writeText(document.getElementById('aiScheduleText').value).then(()=>{
+    toast('Schedule copied — paste into Claude for analysis','ok');
+  });
+}
+
+
+</script>
+</body>
+</html>
