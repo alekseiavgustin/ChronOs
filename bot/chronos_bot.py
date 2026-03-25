@@ -280,7 +280,7 @@ Just paste your Chronos save code (from the 💾 Save button).
 /help       — This message
 
 To change and create the schedule visit: 
-https://chronos.oneapp.dev or https://alekseiavgustin.github.io/ChronOs/
+https://chronos_v1.oneapp.dev or https://alekseiavgustin.github.io/ChronOs/
 """.strip()
 
 
