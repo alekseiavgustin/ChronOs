@@ -72,18 +72,20 @@ def start_health_server():
 
 
 async def self_ping():
-    """Ping own health endpoint every 10 min so Render never spins us down."""
     if not RENDER_EXTERNAL_URL:
         log.info("RENDER_EXTERNAL_URL not set — self-ping disabled")
         return
-    async with httpx.AsyncClient() as client:
-        while True:
-            try:
-                await client.get(RENDER_EXTERNAL_URL, timeout=10)
-                log.info("Self-ping OK")
-            except Exception as ex:
-                log.warning("Self-ping failed: %s", ex)
-            await asyncio.sleep(600)  # every 10 minutes
+    try:
+        async with httpx.AsyncClient() as client:
+            while True:
+                try:
+                    await client.get(RENDER_EXTERNAL_URL, timeout=10)
+                    log.info("Self-ping OK")
+                except Exception as ex:
+                    log.warning("Self-ping failed: %s", ex)
+                await asyncio.sleep(600)
+    except asyncio.CancelledError:
+        pass  # clean shutdown, nothing to worry about
 
 
 # ═══════════════════════════════════════════════════════════════════════════
